@@ -18,12 +18,11 @@ def tokenize():
     # Convert tokens to dictionaries for JSON response
     tokens_dict = [token.to_dict() for token in tokens]
     
-    # Separate valid tokens and errors
-    valid_tokens = [t for t in tokens_dict if t['type'] != 'ERROR']
-    errors = [t for t in tokens_dict if t['type'] == 'ERROR']
+    # Separate errors for the error section
+    errors = [t for t in tokens_dict if t['is_error']]
     
     return jsonify({
-        'tokens': valid_tokens,
+        'all_tokens': tokens_dict,  # Send ALL tokens including errors
         'errors': errors
     })
 

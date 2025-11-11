@@ -8,30 +8,85 @@
 </head>
 <body>
     <div class="header">
-        <h1>OxCLang</h1>
+        <h1>OxC Lang</h1>
     </div>
 
     <div class="container">
         <div class="editor-section">
-            <div class="section-header">Source Code Editor</div>
-            <textarea id="codeInput" placeholder="Start typing your code here..."></textarea>
+            <div class="editor-wrapper">
+                <div id="lineNumbers" class="line-numbers">1</div>
+                <textarea id="codeInput" placeholder="Start typing your code here..." spellcheck="false"></textarea>
+            </div>
         </div>
 
         <div class="output-section">
-            <div class="section-header">Token Output</div>
+            <div class="section-header">
+                <span>LEXER</span>
+                <span>TOKEN</span>
+            </div>
             <div id="tokenOutput"></div>
         </div>
     </div>
 
     <div class="error-section">
-        <div class="section-header">Lexical Errors</div>
+        <div class="error-header">Output Code</div>
         <div id="errorOutput"></div>
     </div>
 
     <script>
         const codeInput = document.getElementById('codeInput');
+        const lineNumbers = document.getElementById('lineNumbers');
         const tokenOutput = document.getElementById('tokenOutput');
         const errorOutput = document.getElementById('errorOutput');
+
+        // Auto-indent with Tab key
+        codeInput.addEventListener('keydown', (e) => {
+            // Handle Tab key
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                
+                const start = codeInput.selectionStart;
+                const end = codeInput.selectionEnd;
+                const value = codeInput.value;
+                
+                // Insert 4 spaces (or use '\t' for actual tab)
+                codeInput.value = value.substring(0, start) + '   ' + value.substring(end);
+                
+                // Move cursor after the inserted spaces
+                codeInput.selectionStart = codeInput.selectionEnd = start + 4;
+                
+                // Trigger input event to update tokens
+                codeInput.dispatchEvent(new Event('input'));
+            }
+            
+            // Auto-close brackets, parentheses, and braces
+            const pairs = {
+                '{': '}',
+                '(': ')',
+                '[': ']',
+                '"': '"'
+            };
+            
+            if (pairs[e.key]) {
+                e.preventDefault();
+                
+                const start = codeInput.selectionStart;
+                const end = codeInput.selectionEnd;
+                const value = codeInput.value;
+                
+                // Insert opening and closing pair
+                const opening = e.key;
+                const closing = pairs[e.key];
+                
+                codeInput.value = value.substring(0, start) + opening + closing + value.substring(end);
+                
+                // Move cursor between the pair
+                codeInput.selectionStart = codeInput.selectionEnd = start + 1;
+                
+                // Trigger input event to update tokens
+                codeInput.dispatchEvent(new Event('input'));
+            }
+        });
 
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -39,39 +94,57 @@
             return div.innerHTML;
         }
 
+        function updateLineNumbers() {
+            const lines = codeInput.value.split('\n');
+            const lineCount = lines.length;
+            
+            let lineNumbersHtml = '';
+            for (let i = 1; i <= lineCount; i++) {
+                lineNumbersHtml += i + '\n';
+            }
+            lineNumbers.textContent = lineNumbersHtml;
+        }
+
         function displayResults(tokens, errors) {
-            // Display tokens
+            // Display ALL tokens (including errors with red background)
             if (tokens.length === 0) {
-                tokenOutput.innerHTML = '<div style="color: #858585; padding: 10px;">No tokens yet. Start typing in the editor...</div>';
+                tokenOutput.innerHTML = '<div style="color: #858585; padding: 10px; text-align: center;">No tokens yet. Start typing in the editor...</div>';
             } else {
-                tokenOutput.innerHTML = tokens.map(token => `
-                    <div class="token">
-                        <span class="token-type">${token.type}</span>
-                        <span class="token-value">${token.value}</span>
-                    </div>
-                `).join('');
+                tokenOutput.innerHTML = tokens.map(token => {
+                    const errorClass = token.is_error ? 'token-error' : '';
+                    return `
+                        <div class="token ${errorClass}">
+                            <span class="token-value">${escapeHtml(token.value)}</span>
+                            <span class="token-type">${token.type}</span>
+                        </div>
+                    `;
+                }).join('');
             }
 
-            // Display errors
+            // Display errors in the error section
             if (errors.length === 0) {
                 errorOutput.innerHTML = '<div class="no-errors">No lexical errors detected</div>';
             } else {
                 errorOutput.innerHTML = errors.map((error, index) => `
                     <div class="error-item">
-                        <div class="error-header">Error #${index + 1}
-                            <span class="error-details">${escapeHtml(error.value)}</span>    
-                            <span class="error-location">Line ${error.line}, Column ${error.column}</span>
-                        </div>
+                        <span style="color: #f48771; font-weight: bold;">Lexical Impostor:</span>
+                        <span class="error-details">"${escapeHtml(error.value)}" is not recognized</span>
                     </div>
                 `).join('');
             }
         }
 
-        // Debounce function to avoid too many requests
-        let timeout = null;
+        // Sync scroll between line numbers and textarea
+        codeInput.addEventListener('scroll', () => {
+            lineNumbers.scrollTop = codeInput.scrollTop;
+        });
+
+        // Update line numbers on input
         codeInput.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
+            updateLineNumbers();
+            
+            clearTimeout(window.tokenizeTimeout);
+            window.tokenizeTimeout = setTimeout(() => {
                 const code = e.target.value;
                 
                 fetch('/tokenize', {
@@ -83,15 +156,16 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    displayResults(data.tokens, data.errors);
+                    displayResults(data.all_tokens, data.errors);
                 })
                 .catch(error => {
                     console.error('Error:', error);
                 });
-            }, 300); // Wait 300ms after user stops typing
+            }, 300);
         });
 
-        // Initialize with empty state
+        // Initialize
+        updateLineNumbers();
         displayResults([], []);
     </script>
 </body>
