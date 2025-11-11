@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OxCLang Compiler</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="header">
+        <h1>OxCLang</h1>
+    </div>
+
+    <div class="container">
+        <div class="editor-section">
+            <div class="section-header">Source Code Editor</div>
+            <textarea id="codeInput" placeholder="Start typing your code here..."></textarea>
+        </div>
+
+        <div class="output-section">
+            <div class="section-header">Token Output</div>
+            <div id="tokenOutput"></div>
+        </div>
+    </div>
+
+    <div class="error-section">
+        <div class="section-header">Lexical Errors</div>
+        <div id="errorOutput"></div>
+    </div>
+
+    <script>
+        const codeInput = document.getElementById('codeInput');
+        const tokenOutput = document.getElementById('tokenOutput');
+        const errorOutput = document.getElementById('errorOutput');
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function displayResults(tokens, errors) {
+            // Display tokens
+            if (tokens.length === 0) {
+                tokenOutput.innerHTML = '<div style="color: #858585; padding: 10px;">No tokens yet. Start typing in the editor...</div>';
+            } else {
+                tokenOutput.innerHTML = tokens.map(token => `
+                    <div class="token">
+                        <span class="token-type">${token.type}</span>
+                        <span class="token-value">${token.value}</span>
+                    </div>
+                `).join('');
+            }
+
+            // Display errors
+            if (errors.length === 0) {
+                errorOutput.innerHTML = '<div class="no-errors">No lexical errors detected</div>';
+            } else {
+                errorOutput.innerHTML = errors.map((error, index) => `
+                    <div class="error-item">
+                        <div class="error-header">Error #${index + 1}
+                            <span class="error-details">${escapeHtml(error.value)}</span>    
+                            <span class="error-location">Line ${error.line}, Column ${error.column}</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Debounce function to avoid too many requests
+        let timeout = null;
+        codeInput.addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                const code = e.target.value;
+                
+                fetch('/tokenize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ code: code })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    displayResults(data.tokens, data.errors);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            }, 300); // Wait 300ms after user stops typing
+        });
+
+        // Initialize with empty state
+        displayResults([], []);
+    </script>
+</body>
+</html>

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lexical Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+
+        .header {
+            background: #252526;
+            padding: 15px 20px;
+            border-bottom: 1px solid #3e3e42;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 500;
+            color: #cccccc;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .editor-section {
+            width: 70%;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #3e3e42;
+        }
+
+        .section-header {
+            background: #2d2d30;
+            padding: 10px 15px;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 13px;
+            font-weight: 500;
+            color: #cccccc;
+        }
+
+        #codeInput {
+            flex: 1;
+            padding: 15px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border: none;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+        }
+
+        .output-section {
+            width: 40%;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+        }
+
+        #tokenOutput {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            border-bottom: 1px solid #3e3e42;
+        }
+
+        .error-section {
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            background: #1e1e1e;
+            border-top: 1px solid #3e3e42;
+        }
+
+        #errorOutput {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .error-item {
+            margin-bottom: 10px;
+            padding: 10px;
+        }
+
+        .error-header {
+            color: #f48771;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .error-details {
+            color: #d4d4d4;
+            margin-bottom: 3px;
+        }
+
+        .error-location {
+            color: #858585;
+            font-size: 11px;
+        }
+
+        .no-errors {
+            color: #4ec9b0;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .token {
+            margin-bottom: 8px;
+            padding: 8px 10px;
+            background: #2d2d30;
+            border-left: 3px solid #007acc;
+            border-radius: 3px;
+        }
+
+        .token-type {
+            color: #4ec9b0;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .token-value {
+            color: #ce9178;
+        }
+
+        .token-position {
+            color: #858585;
+            font-size: 11px;
+            margin-top: 4px;
+            display: block;
+        }
+
+        .error-token {
+            border-left-color: #f48771;
+        }
+
+        .error-token .token-type {
+            color: #f48771;
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4e4e4e;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Lexical Analyzer</h1>
+    </div>
+
+    <div class="container">
+        <div class="editor-section">
+            <div class="section-header">Source Code Editor</div>
+            <textarea id="codeInput" placeholder="Start typing your code here..."></textarea>
+        </div>
+
+        <div class="output-section">
+            <div class="section-header">Token Output</div>
+            <div id="tokenOutput"></div>
+        </div>
+    </div>
+
+    <div class="error-section">
+        <div class="section-header">Lexical Errors</div>
+        <div id="errorOutput"></div>
+    </div>
+
+    <script>
+        // ============================================
+        // LEXER IMPLEMENTATION
+        // Customize this section with your transition diagram
+        // ============================================
+
+        function lexer(sourceCode) {
+            const tokens = [];
+            let position = 0;
+            let line = 1;
+            let column = 1;
+
+            function peek(offset = 0) {
+                return sourceCode[position + offset] || '';
+            }
+
+            function advance() {
+                const char = sourceCode[position];
+                position++;
+                if (char === '\n') {
+                    line++;
+                    column = 1;
+                } else {
+                    column++;
+                }
+                return char;
+            }
+
+            function skipWhitespace() {
+                while (position < sourceCode.length && /\s/.test(peek())) {
+                    advance();
+                }
+            }
+
+            function readIdentifierOrKeyword() {
+                const start = position;
+                const startLine = line;
+                const startCol = column;
+                let value = '';
+
+                // Read first character (must be letter or underscore)
+                if (/[a-zA-Z_]/.test(peek())) {
+                    value += advance();
+                }
+
+                // Read remaining characters (letters, digits, underscores)
+                while (/[a-zA-Z0-9_]/.test(peek())) {
+                    value += advance();
+                }
+
+                // Check if it's a keyword
+                const keywords = ['if', 'else', 'while', 'for', 'return', 'int', 'float', 'void', 'char'];
+                const type = keywords.includes(value) ? 'KEYWORD' : 'IDENTIFIER';
+
+                return { type, value, line: startLine, column: startCol };
+            }
+
+            function readNumber() {
+                const startLine = line;
+                const startCol = column;
+                let value = '';
+                let hasDecimal = false;
+
+                while (/[0-9.]/.test(peek())) {
+                    if (peek() === '.') {
+                        if (hasDecimal) break; // Second decimal point
+                        hasDecimal = true;
+                    }
+                    value += advance();
+                }
+
+                const type = hasDecimal ? 'FLOAT' : 'INTEGER';
+                return { type, value, line: startLine, column: startCol };
+            }
+
+            function readString() {
+                const startLine = line;
+                const startCol = column;
+                let value = '';
+                
+                advance(); // Skip opening quote
+                
+                while (peek() && peek() !== '"' && peek() !== '\n') {
+                    value += advance();
+                }
+                
+                if (peek() === '"') {
+                    advance(); // Skip closing quote
+                    return { type: 'STRING', value: `"${value}"`, line: startLine, column: startCol };
+                } else {
+                    return { type: 'ERROR', value: 'Unterminated string', line: startLine, column: startCol };
+                }
+            }
+
+            // Main lexer loop
+            while (position < sourceCode.length) {
+                skipWhitespace();
+
+                if (position >= sourceCode.length) break;
+
+                const char = peek();
+                const startLine = line;
+                const startCol = column;
+
+                // Identifiers and keywords
+                if (/[a-zA-Z_]/.test(char)) {
+                    tokens.push(readIdentifierOrKeyword());
+                }
+                // Numbers
+                else if (/[0-9]/.test(char)) {
+                    tokens.push(readNumber());
+                }
+                // Strings
+                else if (char === '"') {
+                    tokens.push(readString());
+                }
+                // Operators and punctuation
+                else if (char === '+') {
+                    advance();
+                    if (peek() === '+') {
+                        advance();
+                        tokens.push({ type: 'INCREMENT', value: '++', line: startLine, column: startCol });
+                    } else {
+                        tokens.push({ type: 'ADDITION', value: '+', line: startLine, column: startCol });
+                    }
+                }
+                else if (char === '-') {
+                    advance();
+                    if (peek() === '-') {
+                        advance();
+                        tokens.push({ type: 'DECREMENT', value: '--', line: startLine, column: startCol });
+                    } else {
+                        tokens.push({ type: 'SUBTRACTION', value: '-', line: startLine, column: startCol });
+                    }
+                }
+                else if (char === '*') {
+                    advance();
+                    tokens.push({ type: 'MULTIPLICATION', value: '*', line: startLine, column: startCol });
+                }
+                else if (char === '/') {
+                    advance();
+                    tokens.push({ type: 'DIVISION', value: '/', line: startLine, column: startCol });
+                }
+                else if (char === '=') {
+                    advance();
+                    if (peek() === '=') {
+                        advance();
+                        tokens.push({ type: 'EQUAL TO', value: '==', line: startLine, column: startCol });
+                    } else {
+                        tokens.push({ type: 'PLAIN ASSIGNMENT', value: '=', line: startLine, column: startCol });
+                    }
+                }
+                else if (char === '<') {
+                    advance();
+                    if (peek() === '=') {
+                        advance();
+                        tokens.push({ type: 'LESS THAN OR EQUAL TO', value: '<=', line: startLine, column: startCol });
+                    } else {
+                        tokens.push({ type: 'LESS THAN', value: '<', line: startLine, column: startCol });
+                    }
+                }
+                else if (char === '>') {
+                    advance();
+                    if (peek() === '=') {
+                        advance();
+                        tokens.push({ type: 'OPERATOR', value: '>=', line: startLine, column: startCol });
+                    } else {
+                        tokens.push({ type: 'OPERATOR', value: '>', line: startLine, column: startCol });
+                    }
+                }
+                else if (char === '(') {
+                    advance();
+                    tokens.push({ type: 'PUNCTUATION', value: '(', line: startLine, column: startCol });
+                }
+                else if (char === ')') {
+                    advance();
+                    tokens.push({ type: 'PUNCTUATION', value: ')', line: startLine, column: startCol });
+                }
+                else if (char === '{') {
+                    advance();
+                    tokens.push({ type: 'PUNCTUATION', value: '{', line: startLine, column: startCol });
+                }
+                else if (char === '}') {
+                    advance();
+                    tokens.push({ type: 'PUNCTUATION', value: '}', line: startLine, column: startCol });
+                }
+                else if (char === ';') {
+                    advance();
+                    tokens.push({ type: 'PUNCTUATION', value: ';', line: startLine, column: startCol });
+                }
+                else if (char === ',') {
+                    advance();
+                    tokens.push({ type: 'PUNCTUATION', value: ',', line: startLine, column: startCol });
+                }
+                else {
+                    // Unknown character
+                    const unknownChar = advance();
+                    tokens.push({ type: 'ERROR', value: `Unknown character: ${unknownChar}`, line: startLine, column: startCol });
+                }
+            }
+
+            return tokens;
+        }
+
+        // ============================================
+        // UI UPDATE LOGIC
+        // ============================================
+
+        function displayTokens(tokens) {
+            const output = document.getElementById('tokenOutput');
+            const errorOutput = document.getElementById('errorOutput');
+            
+            // Separate valid tokens from errors
+            const validTokens = tokens.filter(t => t.type !== 'ERROR');
+            const errors = tokens.filter(t => t.type === 'ERROR');
+            
+            // Display valid tokens
+            if (validTokens.length === 0) {
+                output.innerHTML = '<div style="color: #858585; padding: 10px;">No tokens yet. Start typing in the editor...</div>';
+            } else {
+                output.innerHTML = validTokens.map(token => {
+                    return `
+                        <div class="token">
+                            <span class="token-type">${token.type}</span>
+                            <span class="token-value">${escapeHtml(token.value)}</span>
+                            <span class="token-position">Line ${token.line}, Col ${token.column}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            // Display errors
+            if (errors.length === 0) {
+                errorOutput.innerHTML = '<div class="no-errors">✓ No lexical errors detected</div>';
+            } else {
+                errorOutput.innerHTML = errors.map((error, index) => {
+                    return `
+                        <div class="error-item">
+                            <div class="error-header">Error #${index + 1}</div>
+                            <div class="error-details">${escapeHtml(error.value)}</div>
+                            <div class="error-location">Line ${error.line}, Column ${error.column}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Event listener for real-time tokenization
+        const codeInput = document.getElementById('codeInput');
+        codeInput.addEventListener('input', (e) => {
+            const sourceCode = e.target.value;
+            const tokens = lexer(sourceCode);
+            displayTokens(tokens);
+        });
+
+        // Initialize with empty state
+        displayTokens([]);
+    </script>
+</body>
+</html>
