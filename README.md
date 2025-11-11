@@ -4,3 +4,7 @@ Open your terminal (or PowerShell)
 ```
 C:\...\OxCLang> pip install flask
 ```
+> Run
+```
+C:\...\OxCLang> py app.py
+```
