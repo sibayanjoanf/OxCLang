@@ -6,5 +6,5 @@ C:\...\OxCLang> pip install flask
 ```
 > Run
 ```
-C:\...\OxCLang> py app.py
+C:\...\OxCLang\Lexer> py app.py
 ```
