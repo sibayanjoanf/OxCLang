@@ -25,6 +25,8 @@ class Lexer:
         self.tokens = []
         self.string_buffer = ""
         self.in_string_literal = False
+        self.id_counter = 0
+        self.id_map = {}
         
         self.token_class = {
             'atmosphere': 'atmosphere', 'air': 'air', 'vacuum': 'vacuum', 'gasp': 'gasp',
@@ -50,14 +52,14 @@ class Lexer:
         self.structures = ['{', '}', '(', ')', '[', ']', ':', '.', ',', '~', '@']
         self.escape_sequences = {'\\': '\\', '"': '"', '\'': '\'', '@': '@', 'n': '\n', 't': '\t'}
 
-    # Peek at the current character without advancing
+    # peek current character without consuming
     def peek(self, offset=0):
         pos = self.position + offset
         if pos < len(self.source_code):
             return self.source_code[pos]
         return ''
     
-    # Advance/consume the current position and return the character
+    # consume (get?) current position
     def advance(self):
         if self.position < len(self.source_code):
             char = self.source_code[self.position]
@@ -70,7 +72,7 @@ class Lexer:
             return char
         return ''
     
-    # Skip whitespace
+    # skip spaces
     def skip_whitespace(self):
         while self.position < len(self.source_code) and self.peek().isspace():
             self.advance()
@@ -79,7 +81,7 @@ class Lexer:
     def error(self, message, line, column):
         self.tokens.append(Token('ERROR', message, line, column))
     
-    # Lex a string literal
+    # lexing string_lits
     def lex_string(self):
         start_line = self.line
         start_col = self.column
@@ -106,12 +108,12 @@ class Lexer:
                 
         if self.peek() == '"':
             self.advance()
-            self.tokens.append(Token('STRING', self.string_buffer, start_line, start_col))
+            self.tokens.append(Token('string_lit', f'"{self.string_buffer}"', start_line, start_col))
             
         else:
             self.error('string was not closed', start_line, start_col)
 
-
+    # tokenization func
     def tokenize(self):
         self.tokens = []
         
@@ -125,13 +127,15 @@ class Lexer:
             start_line = self.line
             start_col = self.column
             
+            # single comment
             if char == '/' and self.peek(1) == '/':
                 self.advance()
                 self.advance()
                 while self.peek() and self.peek() != '\n':
                     self.advance()
                 continue
-            
+
+            # multi-line comment
             if char == '/' and self.peek(1) == '~':
                 self.advance()
                 self.advance()
@@ -142,6 +146,7 @@ class Lexer:
                     self.advance()
                 continue
             
+            # tokenize operators (even two-char-ops)
             if char in self.operators:
                 lexeme = char
                 self.advance()
@@ -154,20 +159,23 @@ class Lexer:
                 self.tokens.append(Token(lexeme, lexeme, start_line, start_col))
                 continue
             
+            # tokenize structures (e.g. {, }, (, ), etc.)
             if char in self.structures:
                 self.advance()
                 self.tokens.append(Token(self.token_class[char], char, start_line, start_col))
                 continue
-
+            
+            # tokenize string_lits
             if char == '"':
                 self.lex_string()
                 continue
-
+            
+            # tokenize char_lits
             if char == '\'':
                 self.advance()
-                
                 char_content = ''
-                
+
+                # tokenize escape sequences in char literals
                 if self.peek() == '\\':
                     self.advance()
                     escape_char = self.peek()
@@ -175,43 +183,45 @@ class Lexer:
                         self.advance()
                         char_content = self.escape_sequences[escape_char]
                     else:
-                        self.error(f'Invalid escape sequence in char: \\{escape_char}', self.line, self.column)
+                        self.error(f'invalid escape sequence in char: \\{escape_char}', self.line, self.column)
                         self.advance()
-                        
                 elif self.peek() and self.peek() != '\'' and self.peek() != '\n':
                     char_content = self.advance()
                 
                 if self.peek() == '\'':
                     self.advance()
-                    if len(char_content) == 1:
-                        self.tokens.append(Token('CHAR', char_content, start_line, start_col))
+                    if len(char_content) == 0 or len(char_content) == 1:
+                        self.tokens.append(Token('char_lit', f"'{char_content}'", start_line, start_col))
                     else:
-                        self.error('Character literal must contain exactly one character', start_line, start_col)
+                        self.error('character literal must contain none or exactly one character', start_line, start_col)
                 else:
-                    self.error('Character literal was not closed', start_line, start_col)
-                
+                    self.error('character literal was not closed', start_line, start_col)
                 continue 
 
-            if char.isalpha() or char == '_':
+            # tokenize identifier names
+            if char.isalpha():
+                start_line = self.line
+                start_col = self.column  
                 word = self.advance()
                 
-                while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
+                while self.peek() and (self.peek().isalnum()):
                     word += self.advance()
-                
-                if '_' in word[1:]:
-                    self.tokens.append(Token('ERROR', 'invalid ID', start_line, start_col))
-                    continue
                 
                 if word in self.keywords:
                     self.tokens.append(Token(self.token_class[word], word, start_line, start_col))
                 else:
-                    self.tokens.append(Token('id', word, start_line, start_col))
+                    if word not in self.id_map:
+                        self.id_counter += 1
+                        self.id_map[word] = f"id{self.id_counter}"
+                    token_value = self.id_map[word]    
+                    self.tokens.append(Token(token_value, word, start_line, start_col))
                 continue
             
+            # tokenize number literals (int_lit and float_lit)
             if char.isdigit() or ((char == '+' or char == '-') and self.peek(1).isdigit()):
                 number = ''
                 
-                if char == '+' or char == '-':
+                if char == '+' or char == '-':  
                     number += self.advance()
                 
                 has_dot = False
@@ -223,16 +233,16 @@ class Lexer:
                     number += self.advance()
                 
                 if number.endswith('.'):
-                    self.error('number after dot was expected', start_line, start_col)
+                    self.error('number after dot (.) was expected', start_line, start_col)
                     continue
                 
                 if has_dot:
-                    self.tokens.append(Token('FLOAT', number, start_line, start_col))
+                    self.tokens.append(Token('float_lit', number, start_line, start_col))
                 else:
-                    self.tokens.append(Token('INT', number, start_line, start_col))
+                    self.tokens.append(Token('int_lit', number, start_line, start_col))
                 continue
             
             unknown = self.advance()
-            self.tokens.append(Token('ERROR', f'not an accepted character: "{unknown}"', start_line, start_col))
+            self.tokens.append(Token('ERROR', f'"{unknown}" is not recognized', start_line, start_col))
         
         return self.tokens

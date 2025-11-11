@@ -21,7 +21,33 @@ body {
 }
 
 .header {
-    margin: 30px 30px -18px 30px;
+    display: flex;
+    flex-direction: row;
+    margin: 30px 30px -18px 37px;
+    justify-content: space-between;
+    width: 66%;
+}
+
+.run-button {
+    margin-left: 15px; 
+    padding: 5px 12px;
+    border: none;
+    border-radius: 4px;
+    background-color: #39873b; 
+    color: white;
+    font-weight: bold;
+    cursor: not-allowed;
+    opacity: 0.6; 
+    
+}
+
+.run-button:hover {
+    opacity: 0.8;
+    background-color: #873939;
+}
+
+.play-icon {
+    margin-right: 5px;
 }
 
 h1 {
@@ -35,7 +61,7 @@ h1 {
     flex: 1;
     overflow: hidden;
     margin: 30px;
-    gap: 30px;
+    gap: 20px;
 }
 
 .editor-section {
@@ -98,12 +124,13 @@ textarea:focus {
 .section-header {
     display: flex;
     justify-content: space-between;
-    padding: 15px 20px;
+    padding: 15px 30px;
     background: #000000;
     color: #cccccc;
     font-size: 14px;
     font-weight: bold;
-    border-bottom: 1px solid #2a2a2c;
+    border-bottom: 1px solid #1a1a1b;
+    border-radius: 5px 5px 0 0;
 }
 
 #tokenOutput {
@@ -113,32 +140,32 @@ textarea:focus {
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.8;
+    border-radius: 5px;
 }
 
 .error-section {
-    min-height: 120px; 
+    min-height: 20vh; 
     max-height: 20vh;
     display: flex;
     flex-direction: column;
     background: #000000;
-    margin: 0 30px 30px 30px;
-    border: 5px;
+    margin: -20px 30px 30px 30px;
+    border-radius: 5px;
 }
 
 .error-header {
-    background: transparent;
-    padding: 10px 15px;
+    border-radius: -5px;
+    background: #0d1425;
+    padding: 10px 5px;
     font-size: 13px;
     font-weight: 500;
     color: #cccccc;
-    border-radius: 5px 5px 0 0;
-    border-bottom: 1px solid #2a2a2c;
 }
 
 #errorOutput {
-    border-radius: 0 0 5px 5px;
+    border-radius: 5px;
     flex: 1;
-    padding: 15px;
+    padding: 15px 10px;
     overflow-y: auto;
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 13px;
@@ -153,9 +180,9 @@ textarea:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 5px 10px;
     margin-bottom: 8px;
-    padding: 8px 10px;
-    background: #2d2d30;
+    background: #0c0c0c;
     border-radius: 3px;
 }
 
@@ -178,21 +205,19 @@ textarea:focus {
 }
 
 .error-item {
-    margin-bottom: 10px;
-    padding: 10px 15px;
-    background: #2d2d30;
-    border-radius: 3px;
+    padding: 0px 15px;
+    background: transparent;
     color: #d4d4d4;
 }
 
 .error-details {
-    color: #d4d4d4;
+    color: #aa5c5c;
     margin-right: 10px; 
     flex-grow: 1; 
 }
 
 .error-location {
-    color: #858585;
+    color: #434343;
     font-size: 11px;
     flex-shrink: 0; 
 }
@@ -266,5 +291,17 @@ textarea:focus {
 
     .token-type, .token-value {
         font-size: 12px;
+    }
+
+    .run-button {
+    /* On small screens, shrink the button */
+        padding: 5px 8px; 
+        font-size: 0; /* Hide the text by setting font size to zero */
+        width: auto;
+}
+
+    .run-button .play-icon {
+        font-size: 16px; /* Restore the icon size */
+        margin-right: 0; /* Remove space next to the now-hidden text */
     }
 }

@@ -9,6 +9,10 @@
 <body>
     <div class="header">
         <h1>OxC Lang</h1>
+        <button class="run-button">
+            <span class="play-icon">&#9654;</span>
+            Run Code
+        </button>
     </div>
 
     <div class="container">
@@ -29,7 +33,7 @@
     </div>
 
     <div class="error-section">
-        <div class="error-header">Output Code</div>
+        <div class="error-header">OUTPUT CODE</div>
         <div id="errorOutput"></div>
     </div>
 
@@ -105,15 +109,15 @@
             lineNumbers.textContent = lineNumbersHtml;
         }
 
-        function displayResults(tokens, errors) {
-            // Display ALL tokens (including errors with red background)
-            if (tokens.length === 0) {
-                tokenOutput.innerHTML = '<div style="color: #858585; padding: 10px; text-align: center;">No tokens yet. Start typing in the editor...</div>';
+        function displayResults(allTokens, errors) {
+            const validTokens = allTokens.filter(token => !token.is_error);
+            if (validTokens.length === 0) {
+                tokenOutput.innerHTML = '<div style="color: #474747; padding: 10px; text-align: center;">No tokens yet. Start typing in the editor...</div>';
             } else {
-                tokenOutput.innerHTML = tokens.map(token => {
+                tokenOutput.innerHTML = validTokens.map(token => {
                     const errorClass = token.is_error ? 'token-error' : '';
                     return `
-                        <div class="token ${errorClass}">
+                        <div class="token">
                             <span class="token-value">${escapeHtml(token.value)}</span>
                             <span class="token-type">${token.type}</span>
                         </div>
@@ -123,12 +127,13 @@
 
             // Display errors in the error section
             if (errors.length === 0) {
-                errorOutput.innerHTML = '<div class="no-errors">No lexical errors detected</div>';
+                errorOutput.innerHTML = '<placeholder style="color: #474747; padding: 10px; text-align: center;">No lexical errors detected.</placeholder>';
             } else {
-                errorOutput.innerHTML = errors.map((error, index) => `
+                errorOutput.innerHTML = errors.map((error) => `
                     <div class="error-item">
-                        <span style="color: #f48771; font-weight: bold;">Lexical Impostor:</span>
-                        <span class="error-details">"${escapeHtml(error.value)}" is not recognized</span>
+                        <span style="color: #8d1d1d; font-weight: bold;">Lexical Impostor:</span>
+                        <span class="error-details">${escapeHtml(error.value)}</span>
+                        <span class="error-location">[Line ${escapeHtml(error.line)}, Col ${escapeHtml(error.column)}]</span>
                     </div>
                 `).join('');
             }
