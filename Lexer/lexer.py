@@ -227,12 +227,13 @@ class Lexer:
                     self.error('number after dot (.) was expected', start_line, start_col)
                     continue
                 
-                if self.peek() and self.peek().isalpha():
+                if self.peek() and (self.peek().isalpha() or self.peek() == '_'):
                     illegal_sequence = ""
                     while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
                         illegal_sequence += self.advance()
                     illegal_lexeme = number + illegal_sequence
                     self.error(f'invalid number literal: {illegal_lexeme}', start_line, start_col)
+                    self.error('invalid identifier starting with a digit', start_line, start_col)
                     continue
                 
                 parts = number.split('.')
@@ -287,6 +288,17 @@ class Lexer:
                         self.id_map[word] = f"id{self.id_counter}"
                     token_value = self.id_map[word]    
                     self.tokens.append(Token(token_value, word, start_line, start_col))
+                continue
+
+            elif char == '_':
+                start_line = self.line
+                start_col = self.column  
+                illegal_sequence = self.advance()
+
+                while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
+                    illegal_sequence += self.advance()
+
+                self.error(f'invalid identifier starting with underscore: {illegal_sequence}', start_line, start_col)
                 continue
 
             # unrecognized character
