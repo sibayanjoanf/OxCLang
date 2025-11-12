@@ -25,7 +25,6 @@ body {
     flex-direction: row;
     margin: 30px 30px -18px 37px;
     justify-content: space-between;
-    width: 66%;
 }
 
 .run-button {

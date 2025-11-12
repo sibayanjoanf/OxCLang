@@ -27,6 +27,11 @@ class Lexer:
         self.in_string_literal = False
         self.id_counter = 0
         self.id_map = {}
+
+        self.MAX_INT = 9_999_999_999
+        self.MIN_INT = -9_999_999_999
+        self.MAX_FLOAT = 10
+        self.MAX_FLOAT_POINT = 6
         
         self.token_class = {
             'atmosphere': 'atmosphere', 'air': 'air', 'vacuum': 'vacuum', 'gasp': 'gasp',
@@ -198,14 +203,81 @@ class Lexer:
                     self.error('character literal was not closed', start_line, start_col)
                 continue 
 
+            # tokenize number literals (int_lit and float_lit)
+            if char.isdigit() or ((char == '+' or char == '-') and self.peek(1).isdigit()):
+                number = ''
+                start_line = self.line
+                start_col = self.column
+                
+                if char == '+' or char == '-':  
+                    number += self.advance()
+                
+                has_dot = False
+                while self.peek() and (self.peek().isdigit() or self.peek() == '.'):
+                    if self.peek() == '.':
+                        if has_dot:
+                            self.error('multiple dot (.) found in number literal', self.line, self.column)
+                            while self.peek() and not self.peek().isspace():
+                                self.advance()
+                            return self.tokens
+                        has_dot = True
+                    number += self.advance()
+                
+                if number.endswith('.'):
+                    self.error('number after dot (.) was expected', start_line, start_col)
+                    continue
+                
+                if self.peek() and self.peek().isalpha():
+                    illegal_sequence = ""
+                    while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
+                        illegal_sequence += self.advance()
+                    illegal_lexeme = number + illegal_sequence
+                    self.error(f'invalid number literal: {illegal_lexeme}', start_line, start_col)
+                    continue
+                
+                parts = number.split('.')
+                integer_part = parts[0].lstrip('+-')
+                if has_dot:
+                    if len(integer_part) > self.MAX_FLOAT:
+                        self.error(f'float literal exceeds max digits before decimal of {self.MAX_FLOAT}: {number}', start_line, start_col)
+                        continue  
+                    
+                    decimal_part = parts[-1]
+                    if len(decimal_part) > self.MAX_FLOAT_POINT:
+                        self.error(f'float literal exceeds max decimal places of {self.MAX_FLOAT_POINT}: {number}', start_line, start_col)
+                        continue
+
+                    self.tokens.append(Token('float_lit', number, start_line, start_col))
+                else:
+                    abs_value = number.lstrip('+-')
+                    if len(abs_value) > len(str(self.MAX_INT)):
+                        self.error(f'integer literal exceeds maximum magnitude (10 digits): {number}', start_line, start_col)
+                        continue
+
+                    try:
+                        num_value = int(number)
+                        if num_value > self.MAX_INT or num_value < self.MIN_INT:
+                            self.error(f'integer literal value is out of range ({self.MIN_INT} to {self.MAX_INT}): {number}', start_line, start_col)
+                            continue
+                    except ValueError:
+                        self.error(f'invalid integer literal: {number}', start_line, start_col)
+                        continue
+                    self.tokens.append(Token('int_lit', number, start_line, start_col))
+                continue
+
             # tokenize identifier names
             if char.isalpha():
                 start_line = self.line
                 start_col = self.column  
                 word = self.advance()
                 
-                while self.peek() and (self.peek().isalnum()):
+                while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
                     word += self.advance()
+
+                if len(word) > 15:
+                    self.error(f"identifier name exceeds max length of 15 characters: '{word}'", start_line, start_col)
+                    word = word[:15] 
+                    continue
                 
                 if word in self.keywords:
                     self.tokens.append(Token(self.token_class[word], word, start_line, start_col))
@@ -216,32 +288,8 @@ class Lexer:
                     token_value = self.id_map[word]    
                     self.tokens.append(Token(token_value, word, start_line, start_col))
                 continue
-            
-            # tokenize number literals (int_lit and float_lit)
-            if char.isdigit() or ((char == '+' or char == '-') and self.peek(1).isdigit()):
-                number = ''
-                
-                if char == '+' or char == '-':  
-                    number += self.advance()
-                
-                has_dot = False
-                while self.peek() and (self.peek().isdigit() or self.peek() == '.'):
-                    if self.peek() == '.':
-                        if has_dot:
-                            break
-                        has_dot = True
-                    number += self.advance()
-                
-                if number.endswith('.'):
-                    self.error('number after dot (.) was expected', start_line, start_col)
-                    continue
-                
-                if has_dot:
-                    self.tokens.append(Token('float_lit', number, start_line, start_col))
-                else:
-                    self.tokens.append(Token('int_lit', number, start_line, start_col))
-                continue
-            
+
+            # unrecognized character
             unknown = self.advance()
             self.tokens.append(Token('ERROR', f'"{unknown}" is not recognized', start_line, start_col))
         
