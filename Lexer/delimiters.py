@@ -173,7 +173,7 @@ def unary_dlm(char):
         return True
     return (char.isspace() or 
             char.isalpha() or
-            char == '~')
+            char in '~)')
 
 def comma_dlm(char):
     if not char:
