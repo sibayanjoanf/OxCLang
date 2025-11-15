@@ -9,7 +9,7 @@
 <body>
     <div class="header">
         <h1>OxC Lang</h1>
-        <button class="run-button">
+        <button id="runButton" class="run-button">
             <span class="play-icon">&#9654;</span>
             Run Code
         </button>
@@ -25,7 +25,7 @@
 
         <div class="output-section">
             <div class="section-header">
-                <span>LEXER</span>
+                <span>LEXEME</span>
                 <span>TOKEN</span>
             </div>
             <div id="tokenOutput"></div>
@@ -42,6 +42,7 @@
         const lineNumbers = document.getElementById('lineNumbers');
         const tokenOutput = document.getElementById('tokenOutput');
         const errorOutput = document.getElementById('errorOutput');
+        const runButton = document.getElementById('runButton');
 
         // Auto-indent with Tab key
         codeInput.addEventListener('keydown', (e) => {
@@ -112,7 +113,7 @@
         function displayResults(allTokens, errors) {
             const validTokens = allTokens.filter(token => !token.is_error);
             if (validTokens.length === 0) {
-                tokenOutput.innerHTML = '<div style="color: #474747; padding: 10px; text-align: center;">No tokens yet. Start typing in the editor...</div>';
+                tokenOutput.innerHTML = '<div style="color: #474747; padding: 10px; text-align: center;">No tokens yet. Start typing in the editor and click "Run Code" or press F10 to tokenize...</div>';
             } else {
                 tokenOutput.innerHTML = validTokens.map(token => {
                     const errorClass = token.is_error ? 'token-error' : '';
@@ -147,27 +148,35 @@
         // Update line numbers on input
         codeInput.addEventListener('input', (e) => {
             updateLineNumbers();
-            
-            clearTimeout(window.tokenizeTimeout);
-            window.tokenizeTimeout = setTimeout(() => {
-                const code = e.target.value;
-                
-                fetch('/tokenize', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ code: code })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    displayResults(data.all_tokens, data.errors);
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
-            }, 300);
         });
+        
+        runButton.addEventListener('click', runCode);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F10') {
+                e.preventDefault();
+                runCode();
+            }
+        });
+
+        function runCode() {
+            const code = codeInput.value;
+            
+            fetch('/tokenize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ code: code })
+            })
+            .then(response => response.json())
+            .then(data => {
+                displayResults(data.all_tokens, data.errors);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                errorOutput.innerHTML = '<div class="error-item"><span style="color: #8d1d1d;">Error connecting to server</span></div>';
+            });
+        }
 
         // Initialize
         updateLineNumbers();
