@@ -29,16 +29,6 @@ def term_only_dlm(char):
     if not char:
         return True
     return (char == '~')
-
-def else_only_dlm(char):
-    if not char:
-        return True
-    return (char == '{')
-
-def at_only_dlm(char):
-    if not char:
-        return True
-    return (char == '@')
     
 def fun_dlm(char):
     if not char:

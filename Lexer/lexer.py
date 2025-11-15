@@ -1,8 +1,6 @@
 from delimiters import (
     spc_only_dlm,
     term_only_dlm,
-    else_only_dlm,
-    at_only_dlm,
     fun_dlm,
     term_dlm,
     num_dlm,
@@ -1152,12 +1150,20 @@ class Lexer:
             if len(decimal_part) > self.MAX_FLOAT_POINT:
                 self.error(f'float literal exceeds max decimal places of {self.MAX_FLOAT_POINT}: {number}', start_line, start_col)
                 return True
-            self.tokens.append(Token('float_lit', number, start_line, start_col))
+            if num_dlm(self.peek()):
+                self.tokens.append(Token('float_lit', number, start_line, start_col))
+            else:
+                self.error(f"invalid character after float literal: '{self.peek()}'", start_line, start_col)
+                return True
         else:
             if len(integer_part) > len(str(self.MAX_INT)):
                 self.error(f'integer literal exceeds maximum of 10 digits: {number}', start_line, start_col)
                 return True
-            self.tokens.append(Token('int_lit', number, start_line, start_col))
+            if num_dlm(self.peek()):
+                self.tokens.append(Token('int_lit', number, start_line, start_col))
+            else:
+                self.error(f"invalid character after int literal: '{self.peek()}'", start_line, start_col)
+                return True
         return True
 
     # Main tokenization function
