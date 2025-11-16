@@ -24,11 +24,6 @@ def spc_only_dlm(char):
     if not char:
         return True
     return (char.isspace())
-
-def term_only_dlm(char):
-    if not char:
-        return True
-    return (char == '~')
     
 def fun_dlm(char):
     if not char:
@@ -41,7 +36,8 @@ def term_dlm(char):
         return True
     return (char.isspace() or 
             char == '\n' or
-            char.isalpha())
+            char.isalpha() or
+            char == '}')
     
 def num_dlm(char):
     if not char:
@@ -49,14 +45,14 @@ def num_dlm(char):
     return (char.isspace() or 
             char in operator or
             char == '\n' or
-            char in ',~)]}')
+            char in ',~)]}:')
     
 def singq_dlm(char):
     if not char:
         return True
     return (char.isspace() or 
             char == '=' or
-            char in ',~)}')
+            char in ',~)}:')
     
 def doubq_dlm(char):
     if not char:
@@ -86,7 +82,7 @@ def id_dlm(char):
     return (char.isspace() or 
             char in operator or
             char == '\n' or
-            char in '(),~]')
+            char in '(),.~[]{}')
 
 def ass_dlm(char):
     if not char:
@@ -134,6 +130,12 @@ def do_dlm(char):
         return True
     return (char.isspace() or 
             char == '{')
+
+def ctrl_dlm(char):
+    if not char:
+        return True
+    return (char.isspace() or 
+            char == '~')
 
 def colon_dlm(char):
     if not char:
@@ -187,7 +189,7 @@ def closecurl_dlm(char):
         return True
     return (char.isspace() or 
             char.isalpha() or
-            char in '~}' or
+            char in '~},' or
             char == '\n')
 
 def closepare_dlm(char):
@@ -196,14 +198,14 @@ def closepare_dlm(char):
     return (char.isspace() or 
             char in operator or
             char == '\n' or
-            char in '~}{),')
+            char in '~}{)],')
 
 def closesqua_dlm(char):
     if not char:
         return True
     return (char.isspace() or 
             char in operator or
-            char in '~)[')
+            char in ',~)[')
 
 def opencurl_dlm(char):
     if not char:
@@ -219,7 +221,7 @@ def openpare_dlm(char):
     return (char.isspace() or 
             char.isalnum() or
             char == '\n' or
-            char in '"\'()-')
+            char in '"\'()-!')
 
 def opensqua_dlm(char):
     if not char:

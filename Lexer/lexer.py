@@ -1,6 +1,5 @@
 from delimiters import (
     spc_only_dlm,
-    term_only_dlm,
     fun_dlm,
     term_dlm,
     num_dlm,
@@ -16,6 +15,7 @@ from delimiters import (
     rel_dlm,
     log_dlm,
     do_dlm,
+    ctrl_dlm,
     colon_dlm,
     strm_dlm,
     arith_dlm,
@@ -106,6 +106,17 @@ class Lexer:
         else:
             self.error(f"invalid character after '{keyword_name}' keyword: '{self.peek()}'", self.line, self.column)
             return True
+        
+    def tokenize_single(self):
+        if self.td_keyword():
+            return True
+        if self.td_identifier():
+            return True
+        if self.td_number():
+            return True
+        if self.td_operator_structure():
+            return True
+        return False
 
     # TRANSITION DIAGRAM: Keywords/Reserved Words
     def td_keyword(self):
@@ -240,7 +251,7 @@ class Lexer:
                     self.advance()
                     if self.peek() == 'e':
                         self.advance()
-                        if fun_dlm(self.peek()):
+                        if do_dlm(self.peek()):
                             self.tokens.append(Token('else', 'else', start_line, start_col))
                             return True
                         elif self.peek() == 'i':
@@ -281,10 +292,10 @@ class Lexer:
                             return self.check_keyword_delimiter(
                                 'float', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
                             )
-                    elif self.peek() == 'w':  # flow
+                    elif self.peek() == 'w': 
                         self.advance()
                         return self.check_keyword_delimiter(
-                            'flow', term_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                            'flow', ctrl_dlm, saved_position, saved_line, saved_column, start_line, start_col
                         )
         
         # Check for 'g' keywords: gasp, gust
@@ -382,7 +393,7 @@ class Lexer:
                             if self.peek() == 't':
                                 self.advance()
                                 return self.check_keyword_delimiter(
-                                    'resist', term_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                                    'resist', ctrl_dlm, saved_position, saved_line, saved_column, start_line, start_col
                                 )
         
         # Check for 's' keywords: sizeOf, stream, string
@@ -863,60 +874,8 @@ class Lexer:
                     self.error(f"invalid character after '||': '{self.peek()}'", start_line, start_col)
                     return True
             return True
-            
-        # escape sequences - \\, \", \', \@, \t, \n
-        elif char == '\\':
-            self.advance()
-            if self.peek() == '\\':
-                self.advance()
-                if string_dlm(self.peek()):
-                    self.tokens.append(Token('\\\\','\\\\', self.line, self.column))
-                    return True
-                else:
-                    self.error(f"invalid character after '\\\\': '{self.peek()}'", start_line, start_col)
-                    return True
-            elif self.peek() == '"':
-                self.advance()
-                if string_dlm(self.peek()):
-                    self.tokens.append(Token('\\"','\\"', self.line, self.column))
-                    return True
-                else:
-                    self.error(f"invalid character after '\\\"': '{self.peek()}'", start_line, start_col)
-                    return True
-            elif self.peek() == '\'':
-                self.advance()
-                if string_dlm(self.peek()):
-                    self.tokens.append(Token('\\\'','\\\'', self.line, self.column))
-                    return True
-                else:
-                    self.error(f"invalid character after '\\\'': '{self.peek()}'", start_line, start_col)
-                    return True
-            elif self.peek() == '@':
-                self.advance()
-                if string_dlm(self.peek()):
-                    self.tokens.append(Token('\\@','\\@', self.line, self.column))
-                    return True
-                else:
-                    self.error(f"invalid character after '\\@': '{self.peek()}'", start_line, start_col)
-                    return True
-            elif self.peek() == 't':
-                self.advance()
-                if string_dlm(self.peek()):
-                    self.tokens.append(Token('\\t','\\t', self.line, self.column))
-                    return True
-                else:
-                    self.error(f"invalid character after '\\t': '{self.peek()}'", start_line, start_col)
-                    return True
-            elif self.peek() == 'n':
-                self.advance()
-                if string_dlm(self.peek()):
-                    self.tokens.append(Token('\\n','\\n', self.line, self.column))
-                    return True
-                else:
-                    self.error(f"invalid character after '\\n': '{self.peek()}'", start_line, start_col)
-                    return True
         
-        # structure - :, ., ~, ,, @
+        # structure - :, ., ~, ,
         elif char == ':':
             self.advance()
             if colon_dlm(self.peek()):
@@ -951,15 +910,6 @@ class Lexer:
                 return True
             else:
                 self.error(f"invalid character after ',': '{self.peek()}'", start_line, start_col)
-                return True
-            
-        elif char == '@':
-            self.advance()
-            if self.peek() == '{':
-                self.tokens.append(Token('@','@', self.line, self.column))
-                return True
-            else:
-                self.error(f"invalid character after '@': '{self.peek()}'", start_line, start_col)
                 return True
 
     # TRANSITION DIAGRAM: Character Literal
@@ -1007,7 +957,33 @@ class Lexer:
 
         while self.peek() and self.peek() not in '\'"\n':
             char = self.peek()
-            if char == '\\':
+            if char == '@' and self.peek(1) == '{':
+                if string_content: # consume strings before interpolation
+                    self.tokens.append(Token('string_lit', f'"{string_content}"', start_line, start_col))
+                    string_content = ""
+                
+                self.advance()
+                self.advance()
+                self.tokens.append(Token('@{', '@{', self.line-1, self.column-2))
+
+                interpolation_count = 1
+                while self.peek() and interpolation_count > 0:
+                    if self.peek() == '{':
+                        interpolation_count += 1
+                    elif self.peek() == '}':
+                        interpolation_count -= 1
+                        if interpolation_count == 0:
+                            self.tokens.append(Token('}', '}', self.line, self.column))
+                            self.advance()
+                            break
+                    if not self.tokenize_single(): 
+                        self.advance()
+
+                start_line = self.line
+                start_col = self.column
+                continue
+
+            elif char == '\\':
                 self.advance()
                 escape_check = self.peek()
                 if escape_check == '\\':
@@ -1020,7 +996,7 @@ class Lexer:
                     string_content += '\''
                     self.advance()
                 elif escape_check == '@':
-                    string_content += '\\@'
+                    string_content += '@'
                     self.advance()
                 elif escape_check == 'n':
                     string_content += '\\n'
@@ -1043,7 +1019,8 @@ class Lexer:
         if self.peek() == '"':
             self.advance()
             if doubq_dlm(self.peek()):
-                self.tokens.append(Token('string_lit', f'"{string_content}"', start_line, start_col))
+                if string_content or not any(t.type == 'string_lit' for t in self.tokens[-5:]):
+                    self.tokens.append(Token('string_lit', f'"{string_content}"', start_line, start_col))
                 return True
             else:
                 self.error(f"invalid character after string literal: '{self.peek()}'", self.line, self.column)
