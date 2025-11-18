@@ -1,6 +1,6 @@
 @font-face {
     font-family: 'Monocraft';
-    src: url('Monocraft.ttc') format('truetype'); 
+    src: url('VCR_OSD_MONO_1.001.ttf') format('truetype'); 
     font-weight: normal;
     font-style: normal;
 }
@@ -70,11 +70,13 @@ h1 {
 }
 
 .editor-wrapper {
+    font-family: monospace;
     display: flex;
     height: 100%;
     background: #070b14;
     border-radius: 5px;
     overflow: hidden;
+    position: relative;
 }
 
 .line-numbers {
@@ -101,6 +103,37 @@ textarea:focus {
     border: none;
 }
 
+.colored {
+    position: absolute;
+    top: 0; left: 0;
+    white-space: pre-wrap;
+    pointer-events: none;
+    color: transparent;
+}
+
+#coloredCode {
+    padding: 40px 30px;
+    top: 40px;
+    left: 80px;
+    width: 100%;
+    height: 100%;
+
+    white-space: pre-wrap;
+    overflow: auto;
+    pointer-events: none;
+    font-family: inherit;   
+    font-weight: inherit;
+    font-size: 14px;
+    line-height: 1.6;
+    letter-spacing: inherit; 
+    tab-size: inherit;
+    padding: inherit;
+    color: transparent;
+
+    /* stacking */
+    z-index: 2;
+}
+
 #codeInput {
     flex: 1;
     padding: 40px 30px;
@@ -111,6 +144,8 @@ textarea:focus {
     outline: none; 
     line-height: 1.6;
     resize: none;
+
+    z-index: 1;
 }
 
 .output-section {
@@ -193,6 +228,15 @@ textarea:focus {
     margin-right: 8px;
     word-break: break-word; 
 }
+
+.normal { color: white; }
+.dataTypes { color: #89dceb; }
+.functions { color: #5ee68b; }
+.consy { color: #5d2ad6; }
+.rw { color: #df7dae; }
+.num { color: #ceee93; }
+.op { color: #ff00ff; }
+
 
 .token-type {
     color: #4ead63;
