@@ -71,7 +71,8 @@
                 '{': '}',
                 '(': ')',
                 '[': ']',
-                '"': '"'
+                '"': '"',
+                '\'': '\''
             };
             
             if (pairs[e.key]) {
@@ -164,17 +165,32 @@
         // Update line numbers on input
         codeInput.addEventListener('input', (e) => {
             updateLineNumbers();
+
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                runCode();
+            }, typingDelay);
+        });
+
+        let typingTimer;
+        const typingDelay = 200;
+
+        codeInput.addEventListener('input', (e) => {
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => {
+                runCode();
+            }, typingDelay);
         });
 
         codeInput.addEventListener('input', syncHighlight);
         
-        runButton.addEventListener('click', runCode);
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'F10') {
-                e.preventDefault();
-                runCode();
-            }
-        });
+        // runButton.addEventListener('click', runCode);
+        // document.addEventListener('keydown', (e) => {
+        //     if (e.key === 'F10') {
+        //         e.preventDefault();
+        //         runCode();
+        //     }
+        // });
 
         codeInput.addEventListener('input', () =>{
             const codeText = codeInput.value;
