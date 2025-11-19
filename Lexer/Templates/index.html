@@ -20,7 +20,7 @@
             <div class="editor-wrapper">
                     <div id="lineNumbers" class="line-numbers">1</div>
                     <div id="coloredCode" class="colored"></div>
-                    <textarea id="codeInput" placeholder="Start typing your code here..." spellcheck="false"></textarea>
+                    <textarea id="codeInput" placeholder="Start typing your code here..." spellcheck="false" wrap="off"></textarea>
             </div>
         </div>
 
@@ -46,9 +46,8 @@
         const errorOutput = document.getElementById('errorOutput');
         const runButton = document.getElementById('runButton');
 
-        // Auto-indent with Tab key
+        // auto-indent with Tab key
         codeInput.addEventListener('keydown', (e) => {
-            // Handle Tab key
             if (e.key === 'Tab') {
                 e.preventDefault();
                 
@@ -58,11 +57,7 @@
                 
                 // Insert 4 spaces (or use '\t' for actual tab)
                 codeInput.value = value.substring(0, start) + '   ' + value.substring(end);
-                
-                // Move cursor after the inserted spaces
                 codeInput.selectionStart = codeInput.selectionEnd = start + 4;
-                
-                // Trigger input event to update tokens
                 codeInput.dispatchEvent(new Event('input'));
             }
             
@@ -81,17 +76,11 @@
                 const start = codeInput.selectionStart;
                 const end = codeInput.selectionEnd;
                 const value = codeInput.value;
-                
-                // Insert opening and closing pair
                 const opening = e.key;
                 const closing = pairs[e.key];
                 
                 codeInput.value = value.substring(0, start) + opening + closing + value.substring(end);
-                
-                // Move cursor between the pair
                 codeInput.selectionStart = codeInput.selectionEnd = start + 1;
-                
-                // Trigger input event to update tokens
                 codeInput.dispatchEvent(new Event('input'));
             }
         });
@@ -147,20 +136,16 @@
             const codeText = codeInput.value;
             highlight.innerHTML = colorCode(codeText);
 
-            // Match the scroll height
-            highlight.style.height = codeInput.scrollHeight + 'px';
-            // highlight.style.width = 0.6*codeInput.width + 'px';
-
-            // Move overlay according to scroll
-            highlight.style.top = 40 + -codeInput.scrollTop + 'px';
+            highlight.style.left = (80 - codeInput.scrollLeft) + 'px';
+            highlight.style.top = (40 - codeInput.scrollTop) + 'px';
         }
 
         // Sync scroll between line numbers and textarea
         codeInput.addEventListener('scroll', () => {
             lineNumbers.scrollTop = codeInput.scrollTop;
-            highlight.style.top = 40 + -codeInput.scrollTop + 'px'; // shift overlay
+            highlight.style.left = (80 - codeInput.scrollLeft) + 'px';
+            highlight.style.top = (40 - codeInput.scrollTop) + 'px';
         });
-        
 
         // Update line numbers on input
         codeInput.addEventListener('input', (e) => {
@@ -228,7 +213,6 @@
                 .replace(/=/g, "&#x3D;");
         }
 
-
         function colorCode(code) {
             let escaped = escapeHTML(code);
 
@@ -263,12 +247,9 @@
             );
 
             console.log(escaped);
-
             return escaped;
         }
 
-
-        // Initialize
         updateLineNumbers();
         displayResults([], []);
     </script>

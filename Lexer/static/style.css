@@ -71,7 +71,7 @@ h1 {
 
 .editor-wrapper {
     font-family: monospace;
-    display: flex;
+    display: flex;  
     height: 100%;
     background: #070b14;
     border-radius: 5px;
@@ -81,16 +81,18 @@ h1 {
 
 .line-numbers {
     padding: 40px 10px;
-    background: #04060c;
-    color: #474747;
-    font-family: 'Monocraft', 'Consolas', 'Courier New', monospace;
+    background: #070b14;
+    color: #414141;
+    font-family: 'Consolas', 'Courier New', monospace;
     font-size: 14px;
     line-height: 1.6;
     text-align: right;
     user-select: none;
     overflow: hidden;
     min-width: 50px;
-    white-space: pre;  
+    white-space: pre;
+    flex-shrink: 0;
+    z-index: 20;
 }
 
 textarea {
@@ -105,55 +107,49 @@ textarea:focus {
 
 .colored {
     position: absolute;
-    top: 0; left: 0;
-    white-space: pre-wrap;
+    white-space: pre;
     pointer-events: none;
     color: transparent;
-    /* padding-inline-end: 40px; */
-    padding-right: 40px;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: normal;
 }
 
 #coloredCode {
-    width: 100%;
-    height: 100%;
-    white-space: pre-wrap;
-    
-    overflow: auto;
+    position: absolute;
+    top: 40px;
+    left: 30px;
+    white-space: pre;
     pointer-events: none;
-    font-family: inherit;   
-    font-weight: inherit;
+    font-family: 'Consolas', 'Courier New', monospace;
     font-size: 14px;
     line-height: 1.6;
-    letter-spacing: inherit; 
-    tab-size: inherit;
-    /* padding: inherit; */
-    padding-inline-start: 80px;
     color: transparent;
-
-    /* stacking */
-    z-index: 2;
+    z-index: 10;
+    padding: 0;
+    margin: 0;
+    overflow: hidden; 
 }
 
 #codeInput {
     flex: 1;
-    padding: 40px 30px;
+    padding: 40px 30px 40px 30px;
     background: transparent;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: normal;
     border: none;
     font-size: 14px;
     color: #cccccc;
     outline: none; 
     line-height: 1.6;
     resize: none;
-    
-
+    white-space: pre;
+    overflow: auto;
     z-index: 1;
 }
 
 span {
-    display: inline-block;
-    white-space: pre-wrap;
+    display: inline;
+    white-space: pre;
     
 }
 
@@ -271,7 +267,7 @@ span {
 }
 
 .error-location {
-    color: #434343;
+    color: #5f5f5f;
     font-size: 11px;
     flex-shrink: 0; 
 }
@@ -283,6 +279,8 @@ span {
 
 ::-webkit-scrollbar {
     width: 10px;
+    height: 10px;
+    z-index: 20;
 }
 
 ::-webkit-scrollbar-track {
@@ -348,14 +346,13 @@ span {
     }
 
     .run-button {
-    /* On small screens, shrink the button */
         padding: 5px 8px; 
-        font-size: 0; /* Hide the text by setting font size to zero */
+        font-size: 0; 
         width: auto;
 }
 
     .run-button .play-icon {
-        font-size: 16px; /* Restore the icon size */
-        margin-right: 0; /* Remove space next to the now-hidden text */
+        font-size: 16px;
+        margin-right: 0; 
     }
 }
