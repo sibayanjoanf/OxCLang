@@ -82,7 +82,7 @@ def id_dlm(char):
     return (char.isspace() or 
             char in operator or
             char == '\n' or
-            char in '(),.~[]{}\'"')
+            char in '(),.~[]{}')
 
 def ass_dlm(char):
     if not char:
@@ -109,7 +109,7 @@ def eqto_dlm(char):
         return True
     return (char.isspace() or 
             char.isalnum() or
-            char in '"\'(')
+            char in '"\'(-')
 
 def rel_dlm(char):
     if not char:
