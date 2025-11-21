@@ -222,7 +222,7 @@
             );
 
             // function words
-            escaped = escaped.replace(/\b(air|atmosphere|sizeOf|toBool|toChar|toFall|toFloat|toInt|toRise|toString|waft|gasp)\b/g,
+            escaped = escaped.replace(/\b(air|atmosphere|sizeOf|toBool|toChar|toFall|toFloat|toInt|toRise|toString|waft|gasp|horizon)\b/g,
                 '<span class="functions">$1</span>'
             );
 
@@ -234,11 +234,6 @@
             // other rw
             escaped = escaped.replace(/\b(if|else|elseif|stream|case|diffuse|echo|cycle|do|resist|flow|inhale|exhale)\b/g,
                 '<span class="rw">$1</span>'
-            );
-
-            // operators
-            escaped = escaped.replace(/(\+|\-|\*|%|\@)/g,
-                '<span class="op">$1</span>'
             );
 
             // numbers

@@ -237,11 +237,9 @@ span {
 .normal { color: white; }
 .dataTypes { color: #89dceb; }
 .functions { color: #5ee68b; }
-.consy { color: #5d2ad6; }
-.rw { color: #df7dae; }
-.num { color: #ceee93; }
-.op { color: #ff00ff; }
-
+.consy { color: #c2599f; }
+.rw { color: #e6855e; }
+.num { color: #dfdb0f; }
 
 .token-type {
     color: #4ead63;

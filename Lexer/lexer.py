@@ -130,7 +130,6 @@ class Lexer:
         
         if not char.isalpha():
             return False
-        
         # Check for 'a' keywords: air, atmosphere
         if char == 'a':
             self.advance()
