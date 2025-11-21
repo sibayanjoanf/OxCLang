@@ -5,14 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OxCLang Compiler</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
     <div class="header">
         <h1>OxC Lang</h1>
-        <button id="runButton" class="run-button">
-            <span class="play-icon">&#9654;</span>
-            Run Code
-        </button>
+        <div class="icons">
+            <button id="themeSwitch" class="theme-switch">
+                <i id="theme-icon" class="fas fa-sun"></i>
+            </button>
+            <button id="runButton" class="run-button">
+                <span class="play-icon">&#9654;</span>
+                Run Code
+            </button>
+        </div>
     </div>
 
     <div class="container">
@@ -45,6 +51,8 @@
         const tokenOutput = document.getElementById('tokenOutput');
         const errorOutput = document.getElementById('errorOutput');
         const runButton = document.getElementById('runButton');
+        const themeSwitch = document.getElementById('themeSwitch');
+        const themeIcon = document.getElementById('theme-icon');
 
         // auto-indent with Tab key
         codeInput.addEventListener('keydown', (e) => {
@@ -244,6 +252,19 @@
             console.log(escaped);
             return escaped;
         }
+
+        themeSwitch.addEventListener('click', () => {
+            const body = document.body;
+            body.classList.toggle('light-theme');
+            
+            if (body.classList.contains('light-theme')) {
+                themeIcon.classList.remove('fa-sun');
+                themeIcon.classList.add('fa-moon');
+            } else {
+                themeIcon.classList.remove('fa-moon');
+                themeIcon.classList.add('fa-sun');
+            }
+        });
 
         updateLineNumbers();
         displayResults([], []);
