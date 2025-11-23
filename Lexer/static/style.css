@@ -27,24 +27,33 @@
     --color--color-bg-dark: #dddddd; 
     --color-bg-editor: #eeeeee;
     --color-bg-tokens: #e2e2e2; 
-    --color-bg-token-type: #348b47;
+    --color-bg-token-type: #01a6b2;
     --color-text-light: #333333;           
     --color-border-subtle: #dcdcdc;         
     --color-line-number: #999999;
 
-    --color-action-primary: #47cf69;
-    --color-action-hover: #26b84a; 
+    --color-action-primary: #00bac7;
+    --color-action-hover: #05a3ae; 
 
-    --color-syntax-data-type: #0077b6;        
-    --color-syntax-function: #008080;       
-    --color-syntax-constant: #800080;       
-    --color-syntax-keyword: #cc3300;          
-    --color-syntax-number: #a04d00;           
+    --color-syntax-data-type: #0083ca;        
+    --color-syntax-function: #00a761;       
+    --color-syntax-constant: #aa00aa;       
+    --color-syntax-keyword: #db3701;          
+    --color-syntax-number: #c18d00;
+    
+    --color-error-text: #ff5757;     
+    --color-error-highlight: #b83333;
+    --color-error-location: #5f5f5f; 
+    --color-lexical-impostor: #e00000; 
 }
 
 .light-theme #tokenOutput div[style], 
 .light-theme #errorOutput placeholder {
     color: var(--color-line-number) !important;
+}
+
+.lexical-impostor {
+    color: var(--color-lexical-impostor);
 }
 
 @font-face {
@@ -283,6 +292,7 @@ span {
 
 .token {
     display: flex;
+    min-width: fit-content;
     justify-content: space-between;
     align-items: center;
     padding: 5px 10px;

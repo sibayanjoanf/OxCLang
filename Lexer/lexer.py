@@ -5,7 +5,6 @@ from delimiters import (
     num_dlm,
     singq_dlm,
     doubq_dlm,
-    string_dlm,
     bool_dlm,
     id_dlm,
     ass_dlm,
@@ -104,7 +103,7 @@ class Lexer:
             return True
         
         else:
-            self.error(f"invalid character after '{keyword_name}' keyword: '{self.peek()}'", self.line, self.column)
+            self.error(f"invalid character after '{keyword_name}' keyword: {self.peek()}", self.line, self.column)
             return True
         
     def tokenize_single(self):
@@ -261,7 +260,7 @@ class Lexer:
                                     'elseif', fun_dlm, saved_position, saved_line, saved_column, start_line, start_col
                                 )
                         else:
-                            self.error(f"invalid character after 'else' keyword: '{self.peek()}'", self.line, self.column)
+                            self.error(f"invalid character after 'else' keyword: {self.peek()}", self.line, self.column)
                             return True
             elif self.peek() == 'x':
                 self.advance()
@@ -618,7 +617,7 @@ class Lexer:
                     self.tokens.append(Token('++','++', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid token after '++': '{self.peek()}'", self.line, self.column)
+                    self.error(f"invalid character after '++': {self.peek()}", self.line, self.column)
                     return True
             elif self.peek() == '=':
                 self.advance()
@@ -626,10 +625,10 @@ class Lexer:
                     self.tokens.append(Token('+=','+=', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid token after '+=': '{self.peek()}'", self.line, self.column)
+                    self.error(f"invalid character after '+=': {self.peek()}", self.line, self.column)
                     return True
             else:
-                self.error(f"invalid character after '+': '{self.peek()}'", self.line, self.column)
+                self.error(f"invalid character after '+': {self.peek()}", self.line, self.column)
                 return True
             
         elif char == '-':
@@ -643,7 +642,7 @@ class Lexer:
                     self.tokens.append(Token('--','--', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid token after '--': '{self.peek()}'", self.line, self.column)
+                    self.error(f"invalid character after '--': {self.peek()}", self.line, self.column)
                     return True
             elif self.peek() == '=':
                 self.advance()
@@ -651,10 +650,10 @@ class Lexer:
                     self.tokens.append(Token('-=','-=', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid token after '-=': '{self.peek()}'", self.line, self.column)
+                    self.error(f"invalid character after '-=': {self.peek()}", self.line, self.column)
                     return True
             else:
-                self.error(f"invalid character after '-': '{self.peek()}'", self.line, self.column)
+                self.error(f"invalid character after '-': {self.peek()}", self.line, self.column)
                 return True
             
         elif char == '*':
@@ -668,10 +667,10 @@ class Lexer:
                     self.tokens.append(Token('*=','*=', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid token after '*=': '{self.peek()}'", self.line, self.column)
+                    self.error(f"invalid character after '*=': {self.peek()}", self.line, self.column)
                     return True
             else:
-                self.error(f"invalid character after '*': '{self.peek()}'", self.line, self.column)
+                self.error(f"invalid character after '*': {self.peek()}", self.line, self.column)
                 return True
             
         elif char == '/':
@@ -685,7 +684,7 @@ class Lexer:
                     self.tokens.append(Token('/=','/=', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid token after '/=': '{self.peek()}'", self.line, self.column)
+                    self.error(f"invalid character after '/=': {self.peek()}", self.line, self.column)
                     return True
             elif self.peek() == '/':
                 self.advance()
@@ -701,7 +700,7 @@ class Lexer:
                     self.advance()
                 return True
             else:
-                self.error(f"invalid character after '/': '{self.peek()}'", self.line, self.column)
+                self.error(f"invalid character after '/': {self.peek()}", self.line, self.column)
                 return True
             
         elif char == '%':
@@ -715,10 +714,10 @@ class Lexer:
                     self.tokens.append(Token('%=','%=', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '%=': '{self.peek()}'", start_line, start_col)
+                    self.error(f"invalid character after '%=': {self.peek()}", start_line, start_col)
                     return True
             else:
-                self.error(f"invalid character after '%': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '%': {self.peek()}", start_line, start_col)
                 return True
         
         # structure - (),{},[]
@@ -728,7 +727,7 @@ class Lexer:
                 self.tokens.append(Token('(','(', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '(': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '(': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == ')':
@@ -737,7 +736,7 @@ class Lexer:
                 self.tokens.append(Token(')',')', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after ')': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after ')': {self.peek()}", start_line, start_col)
                 return True
         
         elif char == '{':
@@ -746,7 +745,7 @@ class Lexer:
                 self.tokens.append(Token('{','{', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '{{': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '{{': {self.peek()}", start_line, start_col)
                 return True
 
         elif char == '}':
@@ -755,7 +754,7 @@ class Lexer:
                 self.tokens.append(Token('}','}', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '}}': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '}}': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == '[':
@@ -764,7 +763,7 @@ class Lexer:
                 self.tokens.append(Token('[','[', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '[': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '[': {self.peek()}", start_line, start_col)
                 return True
 
         elif char == ']':
@@ -773,7 +772,7 @@ class Lexer:
                 self.tokens.append(Token(']',']', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after ']': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after ']': {self.peek()}", start_line, start_col)
                 return True
             
         # operators - >, >=, <, <=, =, ==, !, !=
@@ -788,10 +787,10 @@ class Lexer:
                     self.tokens.append(Token('>=','>=', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '>=': '{self.peek()}'", start_line, start_col)
+                    self.error(f"invalid character after '>=': {self.peek()}", start_line, start_col)
                     return True
             else:
-                self.error(f"invalid character after '>': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '>': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == '<':
@@ -805,10 +804,10 @@ class Lexer:
                     self.tokens.append(Token('<=','<=', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '<=': '{self.peek()}'", start_line, start_col)
+                    self.error(f"invalid character after '<=': {self.peek()}", start_line, start_col)
                     return True
             else:
-                self.error(f"invalid character after '<': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '<': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == '=':
@@ -822,10 +821,10 @@ class Lexer:
                     self.tokens.append(Token('==','==', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '==': '{self.peek()}'", start_line, start_col)
+                    self.error(f"invalid character after '==': {self.peek()}", start_line, start_col)
                     return True
             else:
-                self.error(f"invalid character after '=': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '=': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == '!':
@@ -839,10 +838,10 @@ class Lexer:
                     self.tokens.append(Token('!=','!=', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '!=': '{self.peek()}'", start_line, start_col)
+                    self.error(f"invalid character after '!=': {self.peek()}", start_line, start_col)
                     return True
             else:
-                self.error(f"invalid character after '!': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '!': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == '&':
@@ -856,10 +855,10 @@ class Lexer:
                     self.tokens.append(Token('&&','&&', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '&&': '{self.peek()}'", start_line, start_col)
+                    self.error(f"invalid character after '&&': {self.peek()}", start_line, start_col)
                     return True
             else:
-                self.error(f"invalid character after '&': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '&': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == '|':
@@ -870,7 +869,7 @@ class Lexer:
                     self.tokens.append(Token('||','||', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '||': '{self.peek()}'", start_line, start_col)
+                    self.error(f"invalid character after '||': {self.peek()}", start_line, start_col)
                     return True
             return True
         
@@ -881,7 +880,7 @@ class Lexer:
                 self.tokens.append(Token(':',':', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after ':': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after ':': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == '.':
@@ -890,7 +889,7 @@ class Lexer:
                 self.tokens.append(Token('.','.', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '.': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '.': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == '~':
@@ -899,7 +898,7 @@ class Lexer:
                 self.tokens.append(Token('~','~', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '~': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after '~': {self.peek()}", start_line, start_col)
                 return True
             
         elif char == ',':
@@ -908,7 +907,7 @@ class Lexer:
                 self.tokens.append(Token(',',',', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after ',': '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after ',': {self.peek()}", start_line, start_col)
                 return True
 
     # TRANSITION DIAGRAM: Character Literal
@@ -934,14 +933,23 @@ class Lexer:
                     self.tokens.append(Token('char_lit', f"'{char_content}'", start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid character after char literal: '{self.peek()}'", self.line, self.column)
+                    self.error(f'invalid character after \'{char_content}\': {self.peek()}', self.line, self.column)
                     return True
             else:
-                self.error('character literal must contain none or exactly one character', start_line, start_col)
-                return True
+                if singq_dlm(self.peek()):
+                    self.error(f"expected none or exactly one character between single quotes: '{char_content}'", start_line, start_col)
+                    return True
+                else:
+                    self.error(f"expected none or exactly one character between single quotes: '{char_content}'", start_line, start_col)
+                    self.error(f'invalid character after \'{char_content}\': {self.peek()}', self.line, self.column)
+                    return True
         else:
-            self.error('character literal was not closed', start_line, start_col)
-            return True
+            if char_content == "":
+                self.error('unterminated single quote', start_line, start_col)
+                return True
+            else:
+                self.error(f'unterminated single quote: \'{char_content}', start_line, start_col)
+                return True
         
     # TRANSITION DIAGRAM: String Literal
     def td_string(self):
@@ -955,66 +963,11 @@ class Lexer:
         self.advance()
 
         while self.peek() and self.peek() not in '\'"\n':
-            char = self.peek()
-            if char == '@' and self.peek(1) == '{':
-                if string_content: # consume strings before interpolation
-                    self.tokens.append(Token('string_lit', f'"{string_content}"', start_line, start_col))
-                    string_content = ""
-                
-                self.advance()
-                self.advance()
-                self.tokens.append(Token('@{', '@{', self.line-1, self.column-2))
-
-                interpolation_count = 1
-                while self.peek() and interpolation_count > 0:
-                    if self.peek() == '{':
-                        interpolation_count += 1
-                    elif self.peek() == '}':
-                        interpolation_count -= 1
-                        if interpolation_count == 0:
-                            self.tokens.append(Token('}', '}', self.line, self.column))
-                            self.advance()
-                            break
-                    if not self.tokenize_single(): 
-                        self.advance()
-
-                start_line = self.line
-                start_col = self.column
-                continue
-
-            elif char == '\\':
-                self.advance()
-                escape_check = self.peek()
-                if escape_check == '\\':
-                    string_content += '\\'
-                    self.advance()
-                elif escape_check == '"':
-                    string_content += '"'
-                    self.advance()
-                elif escape_check == '\'':
-                    string_content += '\''
-                    self.advance()
-                elif escape_check == '@':
-                    string_content += '@'
-                    self.advance()
-                elif escape_check == 'n':
-                    string_content += '\\n'
-                    self.advance()
-                elif escape_check == 't':
-                    string_content += '\\t'
-                    self.advance()
-                else:
-                    self.error(f"invalid escape sequence in string: \\{escape_check}", start_line, start_col)
-                    while self.peek() and self.peek() not in '\'"\n':
-                        self.advance()
-                    if self.peek() == '"':
-                        self.advance()
-                    return True
+            self.peek()
+            if ord(self.peek()) < 128:
+                string_content += self.advance()
             else:
-                if ord(self.peek()) < 128:
-                    string_content += self.advance()
-                else:
-                    self.advance()
+                self.advance()
         if self.peek() == '"':
             self.advance()
             if doubq_dlm(self.peek()):
@@ -1022,11 +975,15 @@ class Lexer:
                     self.tokens.append(Token('string_lit', f'"{string_content}"', start_line, start_col))
                 return True
             else:
-                self.error(f"invalid character after string literal: '{self.peek()}'", self.line, self.column)
+                self.error(f'invalid character after "{string_content}": {self.peek()}', self.line, self.column)
                 return True
         else:
-            self.error('string literal was not closed', start_line, start_col)
-            return True
+            if string_content == "":
+                self.error('unterminated double quote', start_line, start_col)
+                return True
+            else:
+                self.error(f'unterminated double quote: "{string_content}', start_line, start_col)
+                return True
         
     # TRANSITION DIAGRAM: Identifiers
     def td_identifier(self):
@@ -1041,10 +998,10 @@ class Lexer:
         while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
             id_content += self.advance()
         if len(id_content) > 15:
-            self.error(f"identifier name exceeds max length of 15 characters: '{id_content}'", start_line, start_col)
+            self.error(f"'{id_content}' exceeds max length of 15 characters", start_line, start_col)
             return True
         if not id_dlm(self.peek()):
-            self.error(f"invalid character after identifier: '{self.peek()}'", self.line, self.column)
+            self.error(f"invalid character after '{id_content}': {self.peek()}", self.line, self.column)
             return True
         if id_content not in self.id_map:
             self.id_counter += 1
@@ -1065,7 +1022,7 @@ class Lexer:
         while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
             illegal_sequence += self.advance()
         
-        self.error(f'invalid identifier starting with underscore: {illegal_sequence}', start_line, start_col)
+        self.error(f'invalid leading character (underscore): {illegal_sequence}', start_line, start_col)
         return True
     
     # TRANSITION DIAGRAM: Number Literal
@@ -1095,11 +1052,11 @@ class Lexer:
             
             if dot_count > 1:
                 self.error(f'invalid number literal with multiple decimal points: {invalid_sequence}', start_line, start_col)
-                self.error('number not expected after additional dots', start_line, start_col)
+                self.error(f'number not expected after additional dots: {invalid_sequence}', start_line, start_col)
                 return True
             
             if dot_count == 1 and not has_dot:
-                self.error('number after dot (.) was expected', start_line, start_col)
+                self.error('expected digit after dot (.)', start_line, start_col)
                 return True
  
             number = invalid_sequence
@@ -1112,7 +1069,7 @@ class Lexer:
                 illegal_sequence += self.advance()
             illegal_lexeme = number + illegal_sequence
             self.error(f'invalid number literal: {illegal_lexeme}', start_line, start_col)
-            self.error('invalid identifier starting with a digit', start_line, start_col)
+            self.error(f'invalid leading character (digit): {illegal_lexeme}', start_line, start_col)
             return True
         
         parts = number.split('.')
@@ -1120,25 +1077,25 @@ class Lexer:
         
         if has_dot:
             if len(integer_part) > self.MAX_FLOAT:
-                self.error(f'float literal exceeds max digits before decimal of {self.MAX_FLOAT}: {number}', start_line, start_col)
+                self.error(f'{number} exceeds maximum digits before decimal of {self.MAX_FLOAT}', start_line, start_col)
                 return True
             decimal_part = parts[1]
             if len(decimal_part) > self.MAX_FLOAT_POINT:
-                self.error(f'float literal exceeds max decimal places of {self.MAX_FLOAT_POINT}: {number}', start_line, start_col)
+                self.error(f'{number} exceeds maximum decimal places of {self.MAX_FLOAT_POINT}', start_line, start_col)
                 return True
             if num_dlm(self.peek()):
                 self.tokens.append(Token('float_lit', number, start_line, start_col))
             else:
-                self.error(f"invalid character after float literal: '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after {number}: {self.peek()}", start_line, start_col)
                 return True
         else:
             if len(integer_part) > len(str(self.MAX_INT)):
-                self.error(f'integer literal exceeds maximum of 10 digits: {number}', start_line, start_col)
+                self.error(f'{number} exceeds maximum of 10 digits', start_line, start_col)
                 return True
             if num_dlm(self.peek()):
                 self.tokens.append(Token('int_lit', number, start_line, start_col))
             else:
-                self.error(f"invalid character after int literal: '{self.peek()}'", start_line, start_col)
+                self.error(f"invalid character after {number}: {self.peek()}", start_line, start_col)
                 return True
         return True
 

@@ -60,20 +60,12 @@ def doubq_dlm(char):
     return (char.isspace() or 
             char == '=' or
             char in ',~+)}')
-    
-def string_dlm(char):
-    if not char:
-        return True
-    return (char.isspace() or 
-            char == '\n' or
-            char in '"@\\' or
-            (ord(char) < 128) and char not in '\'')        # all ascii char except '
 
 def bool_dlm(char):
     if not char:
         return True
     return (char.isspace() or
-            char in '~,)' or
+            char in '~,)}' or
             char in logical)
 
 def id_dlm(char):
