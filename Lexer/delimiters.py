@@ -59,7 +59,7 @@ def doubq_dlm(char):
         return True
     return (char.isspace() or 
             char == '=' or
-            char in ',~+)}')
+            char in ',~&)}')
 
 def bool_dlm(char):
     if not char:
