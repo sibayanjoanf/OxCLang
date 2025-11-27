@@ -1041,7 +1041,7 @@ class Lexer:
         has_dot = False
         dot_count = 0
 
-        if char == '+' or char == '-':
+        if char == '-':
             number += self.advance()
             char = self.peek()
         
@@ -1131,7 +1131,7 @@ class Lexer:
                 while self.peek() and self.peek().isspace():
                     self.advance()
                 continue 
-            if char in '-+':
+            if char in '-':
                 prev_char = self.peek_backwards()
                 if prev_char and (prev_char.isalnum() or prev_char in ')]}'):
                     if self.td_operator_structure():
