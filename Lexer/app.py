@@ -22,7 +22,7 @@ def tokenize():
     errors = [t for t in tokens_dict if t['is_error']]
     
     return jsonify({
-        'all_tokens': tokens_dict,  # Send ALL tokens including errors
+        'all_tokens': tokens_dict,  # Send all tokens including errors
         'errors': errors
     })
 

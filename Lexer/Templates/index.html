@@ -63,7 +63,7 @@
                 const end = codeInput.selectionEnd;
                 const value = codeInput.value;
                 
-                // Insert 4 spaces (or use '\t' for actual tab)
+                // Insert 4 spaces for a tab
                 codeInput.value = value.substring(0, start) + '   ' + value.substring(end);
                 codeInput.selectionStart = codeInput.selectionEnd = start + 4;
                 codeInput.dispatchEvent(new Event('input'));

@@ -67,6 +67,12 @@ class Lexer:
         if pos < len(self.source_code):
             return self.source_code[pos]
         return ''
+
+    def peek_backwards(self, offset=1):
+        pos = self.position - offset
+        if pos >= 0 and pos < len(self.source_code):
+            return self.source_code[pos]
+        return ''
     
     def advance(self):
         if self.position < len(self.source_code):
@@ -80,9 +86,9 @@ class Lexer:
             return char
         return ''
     
-    def skip_whitespace(self):
-        while self.position < len(self.source_code) and self.peek().isspace():
-            self.advance()
+    # def skip_whitespace(self):
+    #     while self.position < len(self.source_code) and self.peek().isspace():
+    #         self.advance()
     
     def error(self, message, line, column):
         self.tokens.append(Token('ERROR', message, line, column))
@@ -97,11 +103,9 @@ class Lexer:
             self.line = saved_line
             self.column = saved_column
             return False
-        
         elif delimiter_func(self.peek()):
             self.tokens.append(Token(keyword_name, keyword_name, start_line, start_col))
             return True
-        
         else:
             self.error(f"invalid character after '{keyword_name}' keyword: {self.peek()}", self.line, self.column)
             return True
@@ -1029,12 +1033,23 @@ class Lexer:
     def td_number(self):
         start_line = self.line
         start_col = self.column
+        saved_pos = self.position
+        saved_line = self.line
+        saved_col = self.column
         char = self.peek()
         number = ''
         has_dot = False
         dot_count = 0
+
+        if char == '+' or char == '-':
+            number += self.advance()
+            char = self.peek()
         
         if not char.isdigit():
+            if len(number) > 0:
+                self.position = saved_pos
+                self.line = saved_line
+                self.column = saved_col
             return False
         
         while self.peek() and self.peek().isdigit():
@@ -1103,13 +1118,29 @@ class Lexer:
     def tokenize(self):
         self.tokens = []
         while self.position < len(self.source_code):
-            self.skip_whitespace()
+            # self.skip_whitespace()
             
             if self.position >= len(self.source_code):
                 break
             
             start_line = self.line
             start_col = self.column
+            char = self.peek()
+
+            if char.isspace():
+                while self.peek() and self.peek().isspace():
+                    self.advance()
+                continue 
+            if char in '-+':
+                prev_char = self.peek_backwards()
+                if prev_char and (prev_char.isalnum() or prev_char in ')]}'):
+                    if self.td_operator_structure():
+                        continue
+                else:
+                    if self.td_number():
+                        continue
+                    if self.td_operator_structure():
+                        continue   
             if self.td_string():
                 continue
             if self.td_char():

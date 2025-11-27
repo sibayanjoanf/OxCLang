@@ -205,7 +205,7 @@ def opencurl_dlm(char):
     return (char.isspace() or 
             char.isalnum() or
             char == '\n' or
-            char in '"\'}{')
+            char in '"\'}{-')
 
 def openpare_dlm(char):
     if not char:
