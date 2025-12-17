@@ -64,33 +64,33 @@
                 const value = codeInput.value;
                 
                 // Insert 4 spaces for a tab
-                codeInput.value = value.substring(0, start) + '   ' + value.substring(end);
+                codeInput.value = value.substring(0, start) + '    ' + value.substring(end);
                 codeInput.selectionStart = codeInput.selectionEnd = start + 4;
                 codeInput.dispatchEvent(new Event('input'));
             }
             
-            // Auto-close brackets, parentheses, and braces
-            const pairs = {
-                '{': '}',
-                '(': ')',
-                '[': ']',
-                '"': '"',
-                '\'': '\''
-            };
+        //     // Auto-close brackets, parentheses, and braces
+        //     const pairs = {
+        //         '{': '}',
+        //         '(': ')',
+        //         '[': ']',
+        //         '"': '"',
+        //         '\'': '\''
+        //     };
             
-            if (pairs[e.key]) {
-                e.preventDefault();
+        //     if (pairs[e.key]) {
+        //         e.preventDefault();
                 
-                const start = codeInput.selectionStart;
-                const end = codeInput.selectionEnd;
-                const value = codeInput.value;
-                const opening = e.key;
-                const closing = pairs[e.key];
+        //         const start = codeInput.selectionStart;
+        //         const end = codeInput.selectionEnd;
+        //         const value = codeInput.value;
+        //         const opening = e.key;
+        //         const closing = pairs[e.key];
                 
-                codeInput.value = value.substring(0, start) + opening + closing + value.substring(end);
-                codeInput.selectionStart = codeInput.selectionEnd = start + 1;
-                codeInput.dispatchEvent(new Event('input'));
-            }
+        //         codeInput.value = value.substring(0, start) + opening + closing + value.substring(end);
+        //         codeInput.selectionStart = codeInput.selectionEnd = start + 1;
+        //         codeInput.dispatchEvent(new Event('input'));
+        //     }
         });
 
         function escapeHtml(text) {
@@ -115,10 +115,11 @@
             if (validTokens.length === 0) {
                 tokenOutput.innerHTML = '<div style="color: #474747; padding: 10px; text-align: center;">No tokens yet. Start typing in the editor...</div>';
             } else {
-                tokenOutput.innerHTML = validTokens.map(token => {
+                tokenOutput.innerHTML = validTokens.map((token, i) => {
                     const errorClass = token.is_error ? 'token-error' : '';
                     return `
                         <div class="token">
+                            <span class="token-line">${i + 1}</span>
                             <span class="token-value">${escapeHtml(token.value)}</span>
                             <span class="token-type">${token.type}</span>
                         </div>

@@ -1,5 +1,5 @@
 from delimiters import (
-    spc_only_dlm,
+    wspace_dlm,
     fun_dlm,
     term_dlm,
     num_dlm,
@@ -68,8 +68,17 @@ class Lexer:
             return self.source_code[pos]
         return ''
 
-    def peek_backwards(self, offset=1):
+    def peek_backwards(self, offset=1, skip_whitespace=False):
         pos = self.position - offset
+
+        if skip_whitespace:
+            while pos >= 0:
+                char = self.source_code[pos]
+                if char and not char.isspace():
+                    return char
+                pos -= 1
+            return ''
+
         if pos >= 0 and pos < len(self.source_code):
             return self.source_code[pos]
         return ''
@@ -102,13 +111,18 @@ class Lexer:
             self.position = saved_position
             self.line = saved_line
             self.column = saved_column
-            return False
+            return False 
         elif delimiter_func(self.peek()):
             self.tokens.append(Token(keyword_name, keyword_name, start_line, start_col))
             return True
         else:
-            self.error(f"invalid character after '{keyword_name}' keyword: {self.peek()}", self.line, self.column)
-            return True
+            char = self.peek()
+            if char in ['']:
+                self.error(f"expecting a valid delimiter: {keyword_name}", self.line, self.column)
+                return True
+            else:
+                self.error(f"invalid character after '{keyword_name}' keyword: {self.peek()}", self.line, self.column)
+                return True
         
     def tokenize_single(self):
         if self.td_keyword():
@@ -141,7 +155,7 @@ class Lexer:
                 if self.peek() == 'r':
                     self.advance()
                     return self.check_keyword_delimiter(
-                        'air', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                        'air', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                     )
             elif self.peek() == 't': 
                 self.advance()
@@ -150,7 +164,7 @@ class Lexer:
                     if self.peek() == 'o':
                         self.advance()
                         if self.peek() == 's':
-                            self.advance()
+                            self.advance()  
                             if self.peek() == 'p':
                                 self.advance()
                                 if self.peek() == 'h':
@@ -175,7 +189,7 @@ class Lexer:
                     if self.peek() == 'l':
                         self.advance()
                         return self.check_keyword_delimiter(
-                            'bool', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                            'bool', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                         )
         
         # Check for 'c' keywords: case, char, cycle
@@ -188,7 +202,7 @@ class Lexer:
                     if self.peek() == 'e':
                         self.advance()
                         return self.check_keyword_delimiter(
-                            'case', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                            'case', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                         )
             elif self.peek() == 'h':
                 self.advance()
@@ -197,7 +211,7 @@ class Lexer:
                     if self.peek() == 'r':
                         self.advance()
                         return self.check_keyword_delimiter(
-                            'char', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                            'char', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                         )
             elif self.peek() == 'y':
                 self.advance()
@@ -292,7 +306,7 @@ class Lexer:
                         if self.peek() == 't':
                             self.advance()
                             return self.check_keyword_delimiter(
-                                'float', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                                'float', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                             )
                     elif self.peek() == 'w': 
                         self.advance()
@@ -310,7 +324,7 @@ class Lexer:
                     if self.peek() == 'p':
                         self.advance()
                         return self.check_keyword_delimiter(
-                            'gasp', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                            'gasp', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                         )
             elif self.peek() == 'u':
                 self.advance()
@@ -319,7 +333,7 @@ class Lexer:
                     if self.peek() == 't':
                         self.advance()
                         return self.check_keyword_delimiter(
-                            'gust', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                            'gust', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                         )
                         
         # Check for 'h' keywords: horizon
@@ -365,7 +379,7 @@ class Lexer:
                 elif self.peek() == 't':  
                     self.advance()
                     return self.check_keyword_delimiter(
-                        'int', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                        'int', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                     )
         
         # Check for 'n' keywords: naur
@@ -435,7 +449,7 @@ class Lexer:
                             if self.peek() == 'g':
                                 self.advance()
                                 return self.check_keyword_delimiter(
-                                    'string', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                                    'string', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                                 )
                         
         # Check for 't' keywords: toBool, toChar, toFall, toFloat, toInt, toRise, toString, waft
@@ -543,7 +557,7 @@ class Lexer:
                                         if self.peek() == 'l':
                                             self.advance()
                                             return self.check_keyword_delimiter(
-                                                'universal', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                                                'universal', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                                             )
         
         # Check for 'v' keywords: vacuum
@@ -560,7 +574,7 @@ class Lexer:
                             if self.peek() == 'm':
                                 self.advance()
                                 return self.check_keyword_delimiter(
-                                    'vacuum', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                                    'vacuum', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                                 )
         
         # Check for 'w' keywords: wind
@@ -573,7 +587,7 @@ class Lexer:
                     if self.peek() == 'd':
                         self.advance()
                         return self.check_keyword_delimiter(
-                            'wind', spc_only_dlm, saved_position, saved_line, saved_column, start_line, start_col
+                            'wind', wspace_dlm, saved_position, saved_line, saved_column, start_line, start_col
                         )
             elif self.peek() == 'a':
                 self.advance()
@@ -601,6 +615,7 @@ class Lexer:
         self.column = saved_column
         return False
          
+    # TD - Operator/Structure     
     def td_operator_structure(self):
         start_line = self.line
         start_col = self.column
@@ -621,19 +636,34 @@ class Lexer:
                     self.tokens.append(Token('++','++', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid character after '++': {self.peek()}", self.line, self.column)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '++'", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '++': {self.peek()}", self.line, self.column)
+                        return True
             elif self.peek() == '=':
                 self.advance()
                 if ass_dlm(self.peek()):
                     self.tokens.append(Token('+=','+=', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid character after '+=': {self.peek()}", self.line, self.column)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '+='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '+=': {self.peek()}", self.line, self.column)
+                        return True
             else:
-                self.error(f"invalid character after '+': {self.peek()}", self.line, self.column)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '+'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '+': {self.peek()}", self.line, self.column)
+                    return True
             
         elif char == '-':
             self.advance()
@@ -646,19 +676,34 @@ class Lexer:
                     self.tokens.append(Token('--','--', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid character after '--': {self.peek()}", self.line, self.column)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '--'", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '--': {self.peek()}", self.line, self.column)
+                        return True
             elif self.peek() == '=':
                 self.advance()
                 if ass_dlm(self.peek()):
                     self.tokens.append(Token('-=','-=', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid character after '-=': {self.peek()}", self.line, self.column)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '-='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '-=': {self.peek()}", self.line, self.column)
+                        return True
             else:
-                self.error(f"invalid character after '-': {self.peek()}", self.line, self.column)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '-'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '-': {self.peek()}", self.line, self.column)
+                    return True
             
         elif char == '*':
             self.advance()
@@ -671,11 +716,21 @@ class Lexer:
                     self.tokens.append(Token('*=','*=', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid character after '*=': {self.peek()}", self.line, self.column)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '*='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '*=': {self.peek()}", self.line, self.column)
+                        return True
             else:
-                self.error(f"invalid character after '*': {self.peek()}", self.line, self.column)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '*'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '*': {self.peek()}", self.line, self.column)
+                    return True
             
         elif char == '/':
             self.advance()
@@ -688,8 +743,13 @@ class Lexer:
                     self.tokens.append(Token('/=','/=', start_line, start_col))
                     return True
                 else:
-                    self.error(f"invalid character after '/=': {self.peek()}", self.line, self.column)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '/='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '/=': {self.peek()}", self.line, self.column)
+                        return True
             elif self.peek() == '/':
                 self.advance()
                 while self.peek() and self.peek() != '\n':
@@ -704,8 +764,13 @@ class Lexer:
                     self.advance()
                 return True
             else:
-                self.error(f"invalid character after '/': {self.peek()}", self.line, self.column)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '/'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '/': {self.peek()}", self.line, self.column)
+                    return True
             
         elif char == '%':
             self.advance()
@@ -718,11 +783,21 @@ class Lexer:
                     self.tokens.append(Token('%=','%=', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '%=': {self.peek()}", start_line, start_col)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '%='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '%=': {self.peek()}", start_line, start_col)
+                        return True
             else:
-                self.error(f"invalid character after '%': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '%'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '%': {self.peek()}", start_line, start_col)
+                    return True
         
         # structure - (),{},[]
         elif char == '(':
@@ -731,8 +806,13 @@ class Lexer:
                 self.tokens.append(Token('(','(', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '(': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '('", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '(': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == ')':
             self.advance()
@@ -740,8 +820,13 @@ class Lexer:
                 self.tokens.append(Token(')',')', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after ')': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after ')'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after ')': {self.peek()}", start_line, start_col)
+                    return True
         
         elif char == '{':
             self.advance()
@@ -749,17 +834,28 @@ class Lexer:
                 self.tokens.append(Token('{','{', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '{{': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '{'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '{{': {self.peek()}", start_line, start_col)
+                    return True
 
         elif char == '}':
             self.advance()
+            
             if closecurl_dlm(self.peek()):
                 self.tokens.append(Token('}','}', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '}}': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '}'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '}}': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == '[':
             self.advance()
@@ -767,8 +863,13 @@ class Lexer:
                 self.tokens.append(Token('[','[', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '[': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '['", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '[': {self.peek()}", start_line, start_col)
+                    return True
 
         elif char == ']':
             self.advance()
@@ -776,8 +877,13 @@ class Lexer:
                 self.tokens.append(Token(']',']', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after ']': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after ']'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after ']': {self.peek()}", start_line, start_col)
+                    return True
             
         # operators - >, >=, <, <=, =, ==, !, !=
         elif char == '>':
@@ -791,11 +897,21 @@ class Lexer:
                     self.tokens.append(Token('>=','>=', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '>=': {self.peek()}", start_line, start_col)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '>='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '>=': {self.peek()}", start_line, start_col)
+                        return True
             else:
-                self.error(f"invalid character after '>': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '>'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '>': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == '<':
             self.advance()
@@ -808,11 +924,21 @@ class Lexer:
                     self.tokens.append(Token('<=','<=', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '<=': {self.peek()}", start_line, start_col)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '<='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '<=': {self.peek()}", start_line, start_col)
+                        return True
             else:
-                self.error(f"invalid character after '<': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '<'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '<': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == '=':
             self.advance()
@@ -825,11 +951,21 @@ class Lexer:
                     self.tokens.append(Token('==','==', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '==': {self.peek()}", start_line, start_col)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '=='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '==': {self.peek()}", start_line, start_col)
+                        return True
             else:
-                self.error(f"invalid character after '=': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '='", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '=': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == '!':
             self.advance()
@@ -842,11 +978,21 @@ class Lexer:
                     self.tokens.append(Token('!=','!=', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '!=': {self.peek()}", start_line, start_col)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '!='", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '!=': {self.peek()}", start_line, start_col)
+                        return True
             else:
-                self.error(f"invalid character after '!': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '!'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '!': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == '&':
             self.advance()
@@ -859,11 +1005,21 @@ class Lexer:
                     self.tokens.append(Token('&&','&&', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '&&': {self.peek()}", start_line, start_col)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '&&'", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '&&': {self.peek()}", start_line, start_col)
+                        return True
             else:
-                self.error(f"invalid character after '&': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '&'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '&': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == '|':
             self.advance()
@@ -873,8 +1029,13 @@ class Lexer:
                     self.tokens.append(Token('||','||', self.line, self.column))
                     return True
                 else:
-                    self.error(f"invalid character after '||': {self.peek()}", start_line, start_col)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['']:
+                        self.error("expecting a valid delimiter after '||'", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f"invalid character after '||': {self.peek()}", start_line, start_col)
+                        return True
             return True
         
         # structure - :, ., ~, ,
@@ -884,8 +1045,13 @@ class Lexer:
                 self.tokens.append(Token(':',':', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after ':': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after ':'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after ':': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == '.':
             self.advance()
@@ -893,8 +1059,13 @@ class Lexer:
                 self.tokens.append(Token('.','.', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '.': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '.'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '.': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == '~':
             self.advance()
@@ -902,8 +1073,13 @@ class Lexer:
                 self.tokens.append(Token('~','~', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after '~': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after '~'", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after '~': {self.peek()}", start_line, start_col)
+                    return True
             
         elif char == ',':
             self.advance()
@@ -911,8 +1087,13 @@ class Lexer:
                 self.tokens.append(Token(',',',', self.line, self.column))
                 return True
             else:
-                self.error(f"invalid character after ',': {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['']:
+                    self.error("expecting a valid delimiter after ','", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after ',': {self.peek()}", start_line, start_col)
+                    return True
 
     # TRANSITION DIAGRAM: Character Literal
     def td_char(self):
@@ -937,16 +1118,26 @@ class Lexer:
                     self.tokens.append(Token('char_lit', f"'{char_content}'", start_line, start_col))
                     return True
                 else:
-                    self.error(f'invalid character after \'{char_content}\': {self.peek()}', self.line, self.column)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['', '\n']: 
+                        self.error(f"expecting a valid delimiter: '{char_content}'", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f'invalid character after \'{char_content}\': {self.peek()}', self.line, self.column)
+                        return True
             else:
                 if singq_dlm(self.peek()):
                     self.error(f"expected none or exactly one character between single quotes: '{char_content}'", start_line, start_col)
                     return True
                 else:
                     self.error(f"expected none or exactly one character between single quotes: '{char_content}'", start_line, start_col)
-                    self.error(f'invalid character after \'{char_content}\': {self.peek()}', self.line, self.column)
-                    return True
+                    peekChar = self.peek()
+                    if peekChar in ['', '\n']:
+                        self.error(f"expecting a valid delimiter: '{char_content}'", self.line, self.column)
+                        return True
+                    else:
+                        self.error(f'invalid character after \'{char_content}\': {self.peek()}', self.line, self.column)
+                        return True
         else:
             if char_content == "":
                 self.error('unterminated single quote', start_line, start_col)
@@ -979,8 +1170,13 @@ class Lexer:
                     self.tokens.append(Token('string_lit', f'"{string_content}"', start_line, start_col))
                 return True
             else:
-                self.error(f'invalid character after "{string_content}": {self.peek()}', self.line, self.column)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['', '\n']:
+                    self.error(f'expecting a valid delimiter: "{string_content}"', self.line, self.column)
+                    return True
+                else:
+                    self.error(f'invalid character after "{string_content}": {self.peek()}', self.line, self.column)
+                    return True
         else:
             if string_content == "":
                 self.error('unterminated double quote', start_line, start_col)
@@ -1005,8 +1201,13 @@ class Lexer:
             self.error(f"'{id_content}' exceeds max length of 15 characters", start_line, start_col)
             return True
         if not id_dlm(self.peek()):
-            self.error(f"invalid character after '{id_content}': {self.peek()}", self.line, self.column)
-            return True
+            peekChar = self.peek()
+            if peekChar in ['', '\n']:
+                self.error(f"expecting a valid delimiter: {id_content}", self.line, self.column)
+                return True
+            else:
+                self.error(f"invalid character after '{id_content}': {self.peek()}", self.line, self.column)
+                return True
         if id_content not in self.id_map:
             self.id_counter += 1
             self.id_map[id_content] = f"id{self.id_counter}"
@@ -1041,7 +1242,7 @@ class Lexer:
         has_dot = False
         dot_count = 0
 
-        if char == '-':
+        if char == '-':            
             number += self.advance()
             char = self.peek()
         
@@ -1084,7 +1285,7 @@ class Lexer:
                 illegal_sequence += self.advance()
             illegal_lexeme = number + illegal_sequence
             self.error(f'invalid number literal: {illegal_lexeme}', start_line, start_col)
-            self.error(f'invalid leading character (digit): {illegal_lexeme}', start_line, start_col)
+            # self.error(f'invalid leading character (digit): {illegal_lexeme}', start_line, start_col)
             return True
         
         parts = number.split('.')
@@ -1101,8 +1302,13 @@ class Lexer:
             if num_dlm(self.peek()):
                 self.tokens.append(Token('float_lit', number, start_line, start_col))
             else:
-                self.error(f"invalid character after {number}: {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['', '\n']:
+                    self.error(f"expecting a valid delimiter: {number}", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after {number}: {self.peek()}", start_line, start_col)
+                    return True
         else:
             if len(integer_part) > len(str(self.MAX_INT)):
                 self.error(f'{number} exceeds maximum of 10 digits', start_line, start_col)
@@ -1110,8 +1316,13 @@ class Lexer:
             if num_dlm(self.peek()):
                 self.tokens.append(Token('int_lit', number, start_line, start_col))
             else:
-                self.error(f"invalid character after {number}: {self.peek()}", start_line, start_col)
-                return True
+                peekChar = self.peek()
+                if peekChar in ['', '\n']:
+                    self.error(f"expecting a valid delimiter: {number}", self.line, self.column)
+                    return True
+                else:
+                    self.error(f"invalid character after {number}: {self.peek()}", start_line, start_col)
+                    return True
         return True
 
     # Main tokenization function
@@ -1132,7 +1343,7 @@ class Lexer:
                     self.advance()
                 continue 
             if char in '-':
-                prev_char = self.peek_backwards()
+                prev_char = self.peek_backwards(skip_whitespace=True)
                 if prev_char and (prev_char.isalnum() or prev_char in ')]}'):
                     if self.td_operator_structure():
                         continue
