@@ -110,10 +110,11 @@
             lineNumbers.textContent = lineNumbersHtml;
         }
 
-        function displayResults(allTokens, errors) {
+        function displayResults(allTokens, lexicalErrors, syntaxErrors) {
             const validTokens = allTokens.filter(token => !token.is_error);
+
             if (validTokens.length === 0) {
-                tokenOutput.innerHTML = '<div style="color: #474747; padding: 10px; text-align: center;">No tokens yet. Start typing in the editor...</div>';
+                tokenOutput.innerHTML = '<div style="color: #474747; padding: 10px;">No tokens yet. Start typing in the editor...</div>';
             } else {
                 tokenOutput.innerHTML = validTokens.map((token, i) => {
                     const errorClass = token.is_error ? 'token-error' : '';
@@ -127,18 +128,37 @@
                 }).join('');
             }
 
-            // Display errors in the error section
-            if (errors.length === 0) {
-                errorOutput.innerHTML = '<placeholder style="color: #474747; padding: 10px; text-align: center;">No lexical errors detected.</placeholder>';
-            } else {
-                errorOutput.innerHTML = errors.map((error) => `
+            let errorHTML = '';
+
+            // Lexical Errors
+            if (lexicalErrors && lexicalErrors.length > 0) {
+                // errorHTML += '<div style="font-weight: bold; padding: 5px; border-bottom: 1px solid #ccc;">Lexical Errors:</div>';
+                errorHTML += lexicalErrors.map((error) => `
                     <div class="error-item">
-                        <span class="lexical-impostor" font-weight: bold;">Lexical Impostor:</span>
+                        <span class="lexical-impostor" style="font-weight: bold;">Lexical Impostor:</span>
                         <span class="error-details">${escapeHtml(error.value)}</span>
-                        <span class="error-location">[Line ${escapeHtml(error.line)}, Col ${escapeHtml(error.column)}]</span>
+                        <span class="error-location">[Line ${error.line}, Col ${error.column}]</span>
                     </div>
                 `).join('');
             }
+            
+            // Syntax Errors
+            if (syntaxErrors && syntaxErrors.length > 0) {
+                // errorHTML += '<div style="font-weight: bold; padding: 5px; border-bottom: 1px solid #ccc; margin-top: 10px;">Syntax Errors:</div>';
+                errorHTML += syntaxErrors.map((error) => `
+                    <div class="error-item">
+                        <span class="syntactical-impostor" style="color: #8d1d1d; font-weight: bold;">Syntactical Impostor:</span>
+                        <span class="error-details">${escapeHtml(error.message)}</span>
+                        ${error.line > 0 ? `<span class="error-location">[Line ${error.line}, Col ${error.column}]</span>` : ''}
+                    </div>
+                `).join('');
+            }
+
+            if ((!lexicalErrors || lexicalErrors.length === 0) && (!syntaxErrors || syntaxErrors.length === 0)) {
+                errorHTML = '<div style="color: #474747; padding: 10px;">No errors detected.</div>';
+            }
+            
+            errorOutput.innerHTML = errorHTML;
         }
 
         function syncHighlight() {
@@ -162,7 +182,7 @@
 
             clearTimeout(typingTimer);
             typingTimer = setTimeout(() => {
-                runCode();
+                runLexer();
             }, typingDelay);
         });
 
@@ -172,18 +192,24 @@
         codeInput.addEventListener('input', (e) => {
             clearTimeout(typingTimer);
             typingTimer = setTimeout(() => {
-                runCode();
+                runLexer();
             }, typingDelay);
         });
 
         codeInput.addEventListener('input', syncHighlight);
         
-        // runButton.addEventListener('click', runCode);
+        // run button'ed
+        runButton.addEventListener('click', () => {
+            runParser();
+            console.log("girl");
+        });
+
         // document.addEventListener('keydown', (e) => {
         //     if (e.key === 'F10') {
         //         e.preventDefault();
         //         runCode();
         //     }
+        //     
         // });
 
         codeInput.addEventListener('input', () =>{
@@ -191,7 +217,7 @@
             highlight.innerHTML = colorCode(codeText);
         });
 
-        function runCode() {
+        function runLexer() {
             const code = codeInput.value;
             
             fetch('/tokenize', {
@@ -203,11 +229,82 @@
             })
             .then(response => response.json())
             .then(data => {
-                displayResults(data.all_tokens, data.errors);
+                displayResults(data.all_tokens, data.errors, []);
             })
             .catch(error => {
                 console.error('Error:', error);
                 errorOutput.innerHTML = '<div class="error-item"><span style="color: #8d1d1d;">Error connecting to server</span></div>';
+            });
+        }
+
+        function runParser() {
+            const code = codeInput.value;
+            
+            fetch('/parse', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ code: code })
+            })
+            .then(response => response.json())
+            .then(data => {
+                let syntaxErrors = data.syntax_errors || [];
+
+                if (!data.success && data.error && syntaxErrors.length === 0) {
+                    syntaxErrors = [{message: data.error, line: 0, column: 0}];
+                }
+                
+                displayResults(data.all_tokens, data.lexical_errors || [], syntaxErrors);
+                
+                if (data.success) {
+                    // ✅ Parsing successful
+                    console.log('✅ Parsing successful!');
+                    console.log('AST:', data.ast);
+                }                    
+                // } else {
+                //     // ❌ Parsing failed - ADD syntax error to existing errors
+                //     console.log('❌ Parsing failed:', data.error);
+                    
+                //     // Extract line and column from error message
+                //     const errorMsg = data.error;
+                //     const lineMatch = errorMsg.match(/line (\d+)/);
+                //     const colMatch = errorMsg.match(/column (\d+)/);
+                    
+                //     let locationStr = '';
+                //     if (lineMatch && colMatch) {
+                //         locationStr = `<span class="error-location">[Line ${lineMatch[1]}, Col ${colMatch[1]}]</span>`;
+                //     }
+                    
+                //     // Create syntax error HTML
+                //     const syntaxErrorHTML = `
+                //         <div class="error-item">
+                //             <span class="syntactical-impostor" style="color: #8d1d1d; font-weight: bold;">Syntactical Impostor:</span>
+                //             <span class="error-details">${escapeHtml(errorMsg)}</span>
+                //             ${locationStr}
+                //         </div>
+                //     `;
+                    
+                //     // APPEND syntax error to existing content (don't replace)
+                //     // Check if there are already errors displayed
+                //     if (errorOutput.innerHTML.includes('No lexical errors detected')) {
+                //         // Replace the "no errors" message with the syntax error
+                //         errorOutput.innerHTML = syntaxErrorHTML;
+                //     } else {
+                //         // Add syntax error AFTER lexical errors
+                //         errorOutput.innerHTML += syntaxErrorHTML;
+                //     }
+                // }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                errorOutput.innerHTML = '<div class="error-item"><span style="color: #8d1d1d;">Error connecting to server</span></div>';
+                
+                // if (errorOutput.innerHTML.includes('No lexical errors detected')) {
+                //     errorOutput.innerHTML = connectionErrorHTML;
+                // } else {
+                //     errorOutput.innerHTML += connectionErrorHTML;
+                // }
             });
         }
 
