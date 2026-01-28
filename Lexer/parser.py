@@ -53,13 +53,21 @@ class ParseError:
         }
 
 class Parser:
+    FIRST_PRIMARY = {'(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 
+                     'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
+                     'int_lit', 'float_lit', 'yuh', 'naur', 'char_lit', 'string_lit', '!'}
+
     def __init__(self, tokens):
         self.tokens = tokens
         self.position = 0
         self.current_token = tokens[0] if tokens else None
         self.errors = []
+        self.error_reported_at_position = -1
     
     def error(self, message):
+        if self.position == self.error_reported_at_position:
+            return
+        
         if self.current_token:
             line = self.current_token.line
             column = self.current_token.column
@@ -68,6 +76,7 @@ class Parser:
             column = 0
         
         self.errors.append(ParseError(message, line, column))
+        self.error_reported_at_position = self.position
 
     def peek(self):
         if self.current_token:
@@ -92,8 +101,7 @@ class Parser:
             self.advance()
             return token
         else:
-            self.error(f"Expected '{expected_type}', got '{self.current_token.type}'"
-            )
+            self.error(f"Expected '{expected_type}', got '{self.current_token.type}'")
             raise StopIteration
         
     def check_id(self):
@@ -105,7 +113,11 @@ class Parser:
             self.match(identifier_type) 
             return ASTNode('identifier', value=identifier_type)
         else:
-            self.error(f"Expected 'identifier', got '{self.current_token.type}' ")
+            if self.current_token is None:
+                self.error(f"Expected identifier, but reached end of input.")
+            else:
+                self.error(f"Expected 'identifier', got '{self.current_token.type}' ")
+            raise StopIteration
         
     
     # Production 1: <program> → <global_dec> <sub_functions> atmosphere() { <body> }
@@ -129,22 +141,32 @@ class Parser:
             return None, self.errors
     
     def parse_program(self):
-        global_dec_node = self.parse_global_dec()
-        sub_functions_node = self.parse_sub_functions()
+        try: 
+            global_dec_node = self.parse_global_dec()
+            sub_functions_node = self.parse_sub_functions()
+            
+            self.match('atmosphere')
+            self.match('(')
+            self.match(')')
+            self.match('{')
+            body_node = self.parse_body()
+            if self.peek() != '}':
+                self.error(f"Expected '}}' to close atmosphere() function, got '{self.peek()}'")
+            else:
+                self.match('}')
+            
+            return ASTNode('program', children=[
+                global_dec_node,
+                sub_functions_node,
+                body_node
+            ])    
+        except StopIteration:
+            if self.current_token and self.current_token.type == '}':
+                pass
+            elif self.peek() != '}':
+                self.error(f"Expected '}}' to close atmosphere() function")
+            return None
         
-        self.match('atmosphere')
-        self.match('(')
-        self.match(')')
-        self.match('{')
-        body_node = self.parse_body()
-        self.match('}')
-        
-        return ASTNode('program', children=[
-            global_dec_node,
-            sub_functions_node,
-            body_node
-        ])    
-    
     # <global_dec> 
     # Production 2: global_dec → universal <declaration> <global_dec>
     # PREDICT = {universal}
@@ -209,6 +231,17 @@ class Parser:
             id_no = self.check_id()
             norm_dec_node = self.parse_norm_dec()
             norm_tail_node = self.parse_norm_tail()
+
+            current_tok = self.peek()
+            if current_tok != '~':
+                if current_tok == '}':
+                    self.error(f"Missing '~' terminator.")
+                elif current_tok and current_tok not in [',', '~']:
+                    self.error(f"Unexpected '{current_tok}' in declaration - expected ',' or '~'")
+                else:
+                    self.error(f"Expected '~' to end declaration, got '{current_tok}'")
+                raise StopIteration
+
             self.match('~')        
             return ASTNode('normal', children=[data_type_node, id_no, norm_dec_node, norm_tail_node])
         else: 
@@ -233,8 +266,14 @@ class Parser:
             return ASTNode('norm_dec', children=[row_size_node, array_node])
         elif current == '=':
             self.match('=')
+
+            next_tok = self.peek()
+            if next_tok in [',', '~', None] or next_tok in ['atmosphere', 'air', 'universal']:
+                self.error(f"Expected value or expression after '=', not '{next_tok}'")
+                raise StopIteration
+            
             expr_node = self.parse_expr()
-            # self.match('~')
+
             return ASTNode('norm_dec', children=[ASTNode('operator', value='='), expr_node])
         elif current in [',', '~']:
             
@@ -295,7 +334,7 @@ class Parser:
         current = self.peek()
 
         if current in ['++', '--','toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '}'] or current.startswith('id'): 
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '}'] or (current and current.startswith('id')): 
             oned_element_node = self.parse_1d_element()
             return ASTNode('arr_element', children=[oned_element_node])
         elif current == '{':
@@ -318,7 +357,7 @@ class Parser:
         current = self.peek()
 
         if current in ['++', '--','toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit'] or current.startswith('id'): 
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit'] or (current and current.startswith('id')): 
             output_node = self.parse_output()
             element_tail_node = self.parse_element_tail()
             return ASTNode('1d_element', children=[output_node, element_tail_node])
@@ -581,7 +620,7 @@ class Parser:
         current = self.peek()
 
         if current in ['++', '--','toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit'] or current.startswith('id'): 
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit'] or (current and current.startswith('id')): 
             output_node = self.parse_output()
             element_tail_node = self.parse_element_tail()
             return ASTNode('const_1d', children=[output_node, element_tail_node])
@@ -603,8 +642,7 @@ class Parser:
             const_2d_tail_node = self.parse_const_2d_tail()
             return ASTNode('const_2d', children=[const_1d_node, const_2d_tail_node])
         else:
-            self.error("[40] Expected '{', "
-                        f"got '{current}'")
+            self.error(f"[40] Expected '{{', got '{current}'")
 
 
     # <const_2d_tail>
@@ -727,7 +765,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             arith_expr_node = self.parse_arith_expr()
             return ASTNode('size', children=[arith_expr_node])
         elif current == ']':
@@ -880,7 +918,7 @@ class Parser:
             self.match(']')
             return ASTNode('params_pdim_tail', value=']')
         elif current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             pdim_size_node = self.parse_pdim_size()
             self.match(']')
             self.match('[')
@@ -900,7 +938,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             arith_expr_node = self.parse_arith_expr()
             return ASTNode('pdim_size', children=[arith_expr_node])
         else:
@@ -938,7 +976,7 @@ class Parser:
         current = self.peek()
 
         if current in ['int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--',
-                            'if', 'stream', 'cycle', 'echo', 'do', '}', 'gasp'] or current.startswith('id'):
+                            'if', 'stream', 'cycle', 'echo', 'do', '}', 'gasp'] or (current and current.startswith('id')):
             stmt_list_node = self.parse_stmt_list()
             return ASTNode('body', children=[stmt_list_node])
         else:
@@ -957,14 +995,21 @@ class Parser:
         current = self.peek()
 
         if current in ['int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--',
-                            'if', 'stream', 'cycle', 'echo', 'do'] or current.startswith('id'):
+                            'if', 'stream', 'cycle', 'echo', 'do'] or (current and current.startswith('id')):
             statement_node = self.parse_statement()
+
+            if statement_node is None:  # Error occurred
+                raise StopIteration
+
             stmt_list_node = self.parse_stmt_list()
             return ASTNode('stmt_list', children=[statement_node, stmt_list_node])
         elif current in ['}','gasp','resist']:
             return ASTNode('stmt_list_empty')
+        elif current == None:
+            raise StopIteration
         else:
             self.error(f"[71-72] Invalid statements, got '{current}'")
+            
 
 
 
@@ -978,24 +1023,28 @@ class Parser:
 
     def parse_statement(self):
         current = self.peek()
-
-        if current in ['int', 'float', 'char', 'string', 'bool', 'gust', 'wind']:
-            declaration_node = self.parse_declaration()
-            return ASTNode('statement', children=[declaration_node])
-        elif current in ['inhale', 'exhale']:
-            input_output_node = self.parse_input_output()
-            return ASTNode('statement', children=[input_output_node])
-        elif current in ['++', '--'] or current.startswith('id'):
-            identifier_stat_node = self.parse_identifier_stat()
-            return ASTNode('statement', children=[identifier_stat_node])
-        elif current in ['if', 'stream']:
-            conditioner_node = self.parse_conditioner()
-            return ASTNode('statement', children=[conditioner_node])
-        elif current in ['cycle', 'echo', 'do']:
-            iteration_node = self.parse_iteration()
-            return ASTNode('statement', children=[iteration_node])
-        else:
-            self.error(f"[73-77] Invalid statements, got '{current}'")
+        try:
+            if current in ['int', 'float', 'char', 'string', 'bool', 'gust', 'wind']:
+                declaration_node = self.parse_declaration()
+                return ASTNode('statement', children=[declaration_node])
+            elif current in ['inhale', 'exhale']:
+                input_output_node = self.parse_input_output()
+                return ASTNode('statement', children=[input_output_node])
+            elif current in ['++', '--'] or (current and current.startswith('id')):
+                identifier_stat_node = self.parse_identifier_stat()
+                return ASTNode('statement', children=[identifier_stat_node])
+            elif current in ['if', 'stream']:
+                conditioner_node = self.parse_conditioner()
+                return ASTNode('statement', children=[conditioner_node])
+            elif current in ['cycle', 'echo', 'do']:
+                iteration_node = self.parse_iteration()
+                return ASTNode('statement', children=[iteration_node])
+            else:
+                self.error(f"[73-77] Invalid statements, got '{current}'")
+                raise StopIteration
+        except StopIteration:
+            # Re-raise to propagate up
+            raise
 
 
     # <identifier_stat>
@@ -1106,7 +1155,7 @@ class Parser:
             unary_op2_node = self.parse_unary_op2()
             return ASTNode('id_tail', children=[id_access_node, unary_op2_node])
         else:
-            self.error("[86-87] Expected (, [, ., ~, ++, --, =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, } " 
+            self.error("[86-87] Expected (, [, ., ~, ++, --, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, } " 
             f"got '{current}'")        
 
 
@@ -1130,7 +1179,7 @@ class Parser:
             id_no = self.check_id()
             return ASTNode('id_access', children=['.', id_no])
         else:
-            self.error("[88-91] Expected (, [, ., ~, ++, --, =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }  "
+            self.error("[88-91] Expected (, [, ., ~, ++, --, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }  "
                     f"got '{current}'")
 
 
@@ -1215,7 +1264,7 @@ class Parser:
     def parse_output(self):
         current = self.peek()
 
-        if current in ['++', '--'] or current.startswith('id'):
+        if current in ['++', '--'] or (current and current.startswith('id')):
             identifier_node = self.parse_identifier()
             return ASTNode('output', children=[identifier_node])
         elif current in ['toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft']:
@@ -1341,7 +1390,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             logic_expr_node = self.parse_logic_expr()
             return ASTNode('expr', children=[logic_expr_node])
         else:
@@ -1356,7 +1405,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             and_expr_node = self.parse_and_expr()
             or_tail_node = self.parse_or_tail()
             return ASTNode('logic_expr', children=[and_expr_node, or_tail_node])
@@ -1376,6 +1425,12 @@ class Parser:
         
         if current == '||':
             self.match('||')
+
+            next_tok = self.peek()
+            if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
+                self.error(f"[117-118] Expected relational expression after '||' operator")
+                raise StopIteration
+            
             and_expr_node = self.parse_and_expr()
             or_tail_node = self.parse_or_tail()
             return ASTNode('or_tail', children=[and_expr_node, or_tail_node])
@@ -1394,7 +1449,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             rela_expr_node = self.parse_rela_expr()
             and_tail_node = self.parse_and_tail()
             return ASTNode('and_expr', children=[rela_expr_node, and_tail_node])
@@ -1414,6 +1469,12 @@ class Parser:
         
         if current == '&&':
             self.match('&&')
+
+            next_tok = self.peek()
+            if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
+                self.error(f"[120-121] Expected relational expression after '&&' operator")
+                raise StopIteration
+
             rela_expr_node = self.parse_rela_expr()
             and_tail_node = self.parse_and_tail()
             return ASTNode('and_tail', children=[rela_expr_node, and_tail_node])
@@ -1432,7 +1493,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             arith_expr_node = self.parse_arith_expr()
             rela_tail_node = self.parse_rela_tail()
             return ASTNode('rela_expr', children=[arith_expr_node, rela_tail_node])
@@ -1452,6 +1513,12 @@ class Parser:
 
         if current in ['>', '<', '>=', '<=', '==', '!=']:
             rela_sym_node = self.parse_rela_sym()
+
+            next_tok = self.peek()
+            if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
+                self.error(f"[122-123] Expected expression after '{rela_sym_node.children[0].value}' operator")
+                raise StopIteration
+
             arith_expr_node = self.parse_arith_expr()
             return ASTNode('rela_tail', children=[rela_sym_node, arith_expr_node])
         elif current in ['&&', '||', '~', ',', ')']:
@@ -1531,7 +1598,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             term_node = self.parse_term()
             arith_tail_node = self.parse_arith_tail()
             return ASTNode('arith_expr', children=[term_node, arith_tail_node])
@@ -1551,6 +1618,12 @@ class Parser:
 
         if current in ['+', '-']:
             arith_op1_node = self.parse_arith_op1()
+
+            next_tok = self.peek()
+            if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
+                self.error(f"[137-138] Expected expression after '{arith_op1_node.children[0].value}' operator")
+                raise StopIteration
+
             term_node = self.parse_term()
             arith_tail_node = self.parse_arith_tail()
             return ASTNode('arith_tail', children=[arith_op1_node, term_node, arith_tail_node])
@@ -1569,12 +1642,13 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             factor_node = self.parse_factor()
             term_tail_node = self.parse_term_tail()
             return ASTNode('term', children=[factor_node, term_tail_node])
         else:
             self.error(f"[139] Expected '(', identifier, value literal, or function call, got '{current}'")
+            raise StopIteration
 
 
 
@@ -1590,14 +1664,21 @@ class Parser:
 
         if current in ['*', '/', '%']:
             arith_op2_node = self.parse_arith_op2()
+
+            next_tok = self.peek()
+            if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
+                self.error(f"[140-141] Expected expression after '{arith_op2_node.children[0].value}' operator")
+                raise StopIteration
+
             factor_node = self.parse_factor()
             term_tail_node = self.parse_term_tail()
             return ASTNode('term_tail', children=[arith_op2_node, factor_node, term_tail_node])
         elif current in ['~', ']', ',', ')', '||', '&&', '>', '<', '>=', '<=', '==', '!=', '+', '-']:
             return ASTNode('term_tail_empty')
         else:
-            self.error(f"[140-141] Expected '*' or '/' or '%', '(', identifier, value literal, or function call, got '{current}'")
-
+            self.error(f"[140-141] Expected terminator '~' or continuation of expression, got '{current}'.")
+            raise StopIteration
+        
 
     # <factor>
     # Production 142: factor → <primary>
@@ -1608,11 +1689,12 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             primary_node = self.parse_primary()
             return ASTNode('factor', children=[primary_node])
         else:
             self.error(f"[142] Expected '(', identifier, value literal, or function call, got '{current}'")
+            raise StopIteration
 
 
     # <primary>
@@ -1634,7 +1716,7 @@ class Parser:
             self.match(')')
             return ASTNode('primary', children=[expr_node])
         elif current in ['++', '--','toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit'] or current.startswith('id'): 
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit'] or (current and current.startswith('id')): 
             output_node = self.parse_output()
             return ASTNode('primary', children=[output_node])
         elif current == '!':
@@ -1644,7 +1726,13 @@ class Parser:
             self.match(')')
             return ASTNode('primary', children=[logic_expr_node])
         else:
-            self.error(f"[143-145] Expected '(', identifier, value literal, or function call, got '{current}'")
+            if current in ['+', '-', '*', '/', '%', '=', '+=', '-=', '*=', '/=', '%=', '>', '<', '>=', '<=', '==', '!=']:
+                self.error(f"Unexpected operator '{current}' - expected value or identifier")
+            elif current in ['~', '}', ',', ')']:
+                self.error(f"[143-145] Incomplete expression - unexpected '{current}'")
+            else:
+                self.error(f"[143-145] Expected value, identifier, or '(' in expression, got '{current}'")
+            raise StopIteration
 
 
     # <stmt_ctrl>
@@ -1660,7 +1748,7 @@ class Parser:
     def parse_stmt_ctrl(self):
         current = self.peek()
 
-        if current in ['int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', 'if', 'stream', 'cycle', 'echo', 'do'] or current.startswith('id'):
+        if current in ['int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', 'if', 'stream', 'cycle', 'echo', 'do'] or (current and current.startswith('id')):
             statement_node = self.parse_statement()
             stmt_ctrl_node = self.parse_stmt_ctrl()
             return ASTNode('stmt_ctrl', children=[statement_node, stmt_ctrl_node])
@@ -1759,7 +1847,7 @@ class Parser:
             self.match('}')
             return ASTNode('if_tail', children=[stmt_ctrl_node])
         elif current in ['}', 'int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', 
-                         'resist', 'flow', 'if', 'stream', 'cycle', 'echo', 'do', 'gasp'] or current.startswith('id'):
+                         'resist', 'flow', 'if', 'stream', 'cycle', 'echo', 'do', 'gasp'] or (current and current.startswith('id')):
             return ASTNode('if_tail_empty')
         else:
             self.error(f"[154-156] Expected 'elseif' or 'else' or other statements, got '{current}'")
@@ -1773,7 +1861,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             expr_node = self.parse_expr()
             return ASTNode('cond_stat', children=[expr_node])
         else:
@@ -1964,7 +2052,7 @@ class Parser:
         if current in ['int', 'float', 'char', 'string', 'bool']:
             normal_node = self.parse_normal()
             return ASTNode('for_init', children=[normal_node])
-        elif current in ['++', '--'] or current.startswith('id'):
+        elif current in ['++', '--'] or (current and current.startswith('id')):
             identifier_stat_node = self.parse_identifier_stat()
             return ASTNode('for_init', children=[identifier_stat_node])
         else:
@@ -2064,7 +2152,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             param_list_node = self.parse_param_list()
             return ASTNode('param_opts', children=[param_list_node])
         elif current == ')':
@@ -2080,7 +2168,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             param_item_node = self.parse_param_item()
             param_tail_node = self.parse_param_tail()
             return ASTNode('param_opts', children=[param_item_node, param_tail_node])
@@ -2096,7 +2184,7 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or current.startswith('id'):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             expr_node = self.parse_expr()
             return ASTNode('param_item', children=[expr_node])
         else:
