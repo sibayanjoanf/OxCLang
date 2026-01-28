@@ -110,7 +110,7 @@
             lineNumbers.textContent = lineNumbersHtml;
         }
 
-        function displayResults(allTokens, lexicalErrors, syntaxErrors) {
+        function displayResults(allTokens, lexicalErrors, syntaxErrors, syntaxInitialized) {
             const validTokens = allTokens.filter(token => !token.is_error);
 
             if (validTokens.length === 0) {
@@ -129,6 +129,15 @@
             }
 
             let errorHTML = '';
+
+            if (!lexicalErrors || lexicalErrors.length === 0) {
+                errorHTML += '<div class="error-item" style="color: #474747;">No lexical errors detected.</div>';
+                if (!syntaxInitialized) {
+                    errorHTML += '<div class="error-item" style="color: #474747;">Syntax analyzer not initialized yet.</div>';
+                } else if (!syntaxErrors || syntaxErrors.length === 0) {
+                    errorHTML += '<div class="error-item" style="color: #474747;">No syntax errors detected.</div>';
+                }
+            }       
 
             // Lexical Errors
             if (lexicalErrors && lexicalErrors.length > 0) {
@@ -153,10 +162,8 @@
                     </div>
                 `).join('');
             }
+   
 
-            if ((!lexicalErrors || lexicalErrors.length === 0) && (!syntaxErrors || syntaxErrors.length === 0)) {
-                errorHTML = '<div style="color: #474747; padding: 10px;">No errors detected.</div>';
-            }
             
             errorOutput.innerHTML = errorHTML;
         }
@@ -229,7 +236,7 @@
             })
             .then(response => response.json())
             .then(data => {
-                displayResults(data.all_tokens, data.errors, []);
+                displayResults(data.all_tokens, data.errors, [], false);
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -255,7 +262,7 @@
                     syntaxErrors = [{message: data.error, line: 0, column: 0}];
                 }
                 
-                displayResults(data.all_tokens, data.lexical_errors || [], syntaxErrors);
+                displayResults(data.all_tokens, data.lexical_errors || [], syntaxErrors, true);
                 
                 if (data.success) {
                     // ✅ Parsing successful
