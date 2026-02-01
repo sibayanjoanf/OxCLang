@@ -1110,7 +1110,7 @@ class Parser:
             assignment_node = self.parse_assignment()
             return ASTNode('identifier_stat', children=[assignment_node])
         else:
-            self.error(f"[82-83] Expected [, .,  ++, --,  =, +=, -=, *=, /=, %=, got '{current}'")
+            self.error(f"[82-83] Expected [++, --,  =, +=, -=, *=, /=, %=, got '{current}'")
 
     # <identifier>
     # Production 84: identifier → <unary_op> id<id_access>
@@ -2245,3 +2245,4 @@ class Parser:
     #             f"got '{current}' at line {self.current_token.line}"
 
     #         )
+
