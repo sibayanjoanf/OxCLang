@@ -1428,7 +1428,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"[117-118] Expected relational expression after '||' operator")
+                self.error(f"[117-118] Expected relational expression after or boolean '||' operator")
                 raise StopIteration
             
             and_expr_node = self.parse_and_expr()
@@ -1472,7 +1472,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"[120-121] Expected relational expression after '&&' operator")
+                self.error(f"[120-121] Expected relational expression or boolean after '&&' operator")
                 raise StopIteration
 
             rela_expr_node = self.parse_rela_expr()
@@ -2245,5 +2245,6 @@ class Parser:
     #             f"got '{current}' at line {self.current_token.line}"
 
     #         )
+
 
 
