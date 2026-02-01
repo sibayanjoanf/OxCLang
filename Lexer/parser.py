@@ -567,7 +567,7 @@ class Parser:
             const_tail_node = self.parse_const_tail()
             return ASTNode('const_dec', children=[row_size_node, ASTNode('operator', value='='), const_arr_node, const_tail_node])
         else:
-            self.error(f"[33-34] Expected '=' or '[', got '{current}'")
+            self.error(f"[33-34] Constant declaration needs intialization. Expected '=' or '[', got '{current}'")
 
 
     # <const_tail>
@@ -1276,7 +1276,13 @@ class Parser:
             self.error(f"[96-98] Expected '++, --' or function call or character/string literal, got '{current}'")
 
     # <literal>
-    # Production 99-100: 
+    # Production 99: literal → <value>
+    # PREDICT = { int_lit, float_lit, yuh, naur }
+
+    # Production 100: literal → <output_concat> <output_tail>
+    # PREDICT = { char_lit, string_lit }
+
+
     def parse_literal(self):
         current = self.peek()
         
@@ -1313,7 +1319,7 @@ class Parser:
             self.error(f"[100-103] Expected value literal, got '{current}'")
 
     # <output_concat>
-    # Production 104–105: output_content → char_lit | string_lit
+    # Production 104–105: output_concat → char_lit | string_lit
     # PREDICT = {char_lit | string_lit}
 
     def parse_output_concat(self):
