@@ -1336,7 +1336,7 @@ class Parser:
         elif current in ['+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=', ',', '~', ')', '||', '&&', '}']:
             return ASTNode('output_tail_empty')
         else:
-            self.error(f"[106-107] Expected '&' or operators, got '{current}'")
+            self.error(f"[106-107] Expected '&' or operators or terminator '~', got '{current}'")
 
     # <assi_op>
     # Production 108-113: assi_op → = | += | -= | *= | /= | %=
@@ -2243,4 +2243,5 @@ class Parser:
     #         raise SyntaxError(
     #             f"Expected data type (int, float, char, string, bool), "
     #             f"got '{current}' at line {self.current_token.line}"
+
     #         )
