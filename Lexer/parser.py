@@ -544,7 +544,7 @@ class Parser:
 
 
     # <const_dec>
-    # Production 33: const_dec → = <expr> <const_tail>
+    # Production 33: const_dec → = <literal> <const_tail>
     # PREDICT = {=}
 
     # Production 34: const_dec → <row_size> = {<const_arr>} <const_tail>
@@ -555,9 +555,9 @@ class Parser:
 
         if current == '=':
             self.match('=')
-            expr_node = self.parse_expr()
+            literal_node = self.parse_literal()
             const_tail_node = self.parse_const_tail()
-            return ASTNode('const_dec', children=[ASTNode('operator', value='='), expr_node, const_tail_node])
+            return ASTNode('const_dec', children=[ASTNode('operator', value='='), literal_node, const_tail_node])
         elif current == '[':
             row_size_node = self.parse_row_size()
             self.match('=')
@@ -593,7 +593,7 @@ class Parser:
 
     # <const_arr>
     # Production 37: const_arr → <const_1d>
-    # PREDICT = {int_lit, float_lit, char_lit, string_lit, yuh, naur}
+    # PREDICT = { ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit }
 
     # Production 38: const_arr → <const_2d>
     # PREDICT = {{}
@@ -601,7 +601,8 @@ class Parser:
     def parse_const_arr(self):
         current = self.peek()
 
-        if current in ['int_lit', 'float_lit', 'char_lit', 'string_lit', 'yuh', 'naur']:
+        if current in ['++', '--','toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit'] or (current and current.startswith('id')): 
             const_1d_node = self.parse_const_1d()
             return ASTNode('const_arr', children=[const_1d_node])
         elif current == '{':
@@ -1255,11 +1256,9 @@ class Parser:
     # Production 97: output → <function_call>
     # PREDICT = {toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft}
 
-    # Production 98: output → <value>
-    # PREDICT = { int_lit, float_lit, yuh, naur }
+    # Production 98: output → <literal>
+    # PREDICT = { int_lit, float_lit, yuh, naur, char_lit, string_lit }
 
-    # Production 99: output → <output_concat> <output_tail>
-    # PREDICT = {char_lit, string_lit}
 
     def parse_output(self):
         current = self.peek()
@@ -1270,15 +1269,26 @@ class Parser:
         elif current in ['toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft']:
             function_call_node = self.parse_function_call()
             return ASTNode('output', children=[function_call_node])
-        elif current in ['int_lit', 'float_lit', 'yuh', 'naur']:
+        elif current in ['int_lit', 'float_lit', 'yuh', 'naur', 'char_lit', 'string_lit']:
+            literal_node = self.parse_literal()
+            return ASTNode('output', children=[literal_node])
+        else:
+            self.error(f"[96-98] Expected '++, --' or function call or character/string literal, got '{current}'")
+
+    # <literal>
+    # Production 99-100: 
+    def parse_literal(self):
+        current = self.peek()
+        
+        if current in ['int_lit', 'float_lit', 'yuh', 'naur']:
             value_node = self.parse_value()
-            return ASTNode('output', children=[value_node])
+            return ASTNode('literal', children=[value_node])
         elif current in ['char_lit', 'string_lit']:
             output_concat_node = self.parse_output_concat()
             output_tail_node = self.parse_output_tail()
-            return ASTNode('output', children=[output_concat_node, output_tail_node])
+            return ASTNode('literal', children=[output_concat_node, output_tail_node])
         else:
-            self.error(f"[98-100] Expected '++, --' or function call or character/string literal, got '{current}'")
+            self.error(f"[99-100] Expected value literal, got '{current}'")
 
     # <value>
     # Production 100–103: value → int_lit | float_lit | yuh | naur
@@ -1428,7 +1438,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"[117-118] Expected relational expression after or boolean '||' operator")
+                self.error(f"[117-118] Expected relational expression or boolean after '||' operator")
                 raise StopIteration
             
             and_expr_node = self.parse_and_expr()
@@ -2243,8 +2253,4 @@ class Parser:
     #         raise SyntaxError(
     #             f"Expected data type (int, float, char, string, bool), "
     #             f"got '{current}' at line {self.current_token.line}"
-
     #         )
-
-
-
