@@ -154,6 +154,10 @@ class Parser:
                 self.error(f"Expected '}}' to close atmosphere() function, got '{self.peek()}'")
             else:
                 self.match('}')
+
+            after = self.peek()
+            if after:
+                self.error(f"Not expecting tokens after atmosphere() function, got '{after}'.")
             
             return ASTNode('program', children=[
                 global_dec_node,
@@ -927,7 +931,7 @@ class Parser:
             self.match(']')
             return ASTNode('params_pdim_tail', children=[pdim_size_node, pdim_size_node2])
         else:
-            self.error(f"[65-66] Expected '(', identifier, value literal, or predefined function, got '{current}'")
+            self.error(f"[65-66] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <pdim_size>
@@ -943,7 +947,7 @@ class Parser:
             arith_expr_node = self.parse_arith_expr()
             return ASTNode('pdim_size', children=[arith_expr_node])
         else:
-            self.error(f"[67] Expected '(', identifier, value literal, or predefined function, got '{current}'")
+            self.error(f"[67] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <params_tail>
@@ -1156,7 +1160,7 @@ class Parser:
             unary_op2_node = self.parse_unary_op2()
             return ASTNode('id_tail', children=[id_access_node, unary_op2_node])
         else:
-            self.error("[86-87] Expected (, [, ., ~, ++, --, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, } " 
+            self.error("[86-87] Expected (, [, ., ++, --, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ), ||, &&, } " 
             f"got '{current}'")        
 
 
@@ -1180,7 +1184,7 @@ class Parser:
             id_no = self.check_id()
             return ASTNode('id_access', children=['.', id_no])
         else:
-            self.error("[88-91] Expected (, [, ., ~, ++, --, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }  "
+            self.error("[88-91] Expected (, [, ., ++, --, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ), ||, &&, }  "
                     f"got '{current}'")
 
 
@@ -1410,7 +1414,7 @@ class Parser:
             logic_expr_node = self.parse_logic_expr()
             return ASTNode('expr', children=[logic_expr_node])
         else:
-            self.error(f"[115] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[115] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <logic_expr>
@@ -1426,7 +1430,7 @@ class Parser:
             or_tail_node = self.parse_or_tail()
             return ASTNode('logic_expr', children=[and_expr_node, or_tail_node])
         else:
-            self.error(f"[116] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[116] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <or_tail>
@@ -1444,7 +1448,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"[117-118] Expected relational expression or boolean after '||' operator")
+                self.error(f"[117-118] Expected relational expression or boolean after '||' operator, got '{next_tok}'")
                 raise StopIteration
             
             and_expr_node = self.parse_and_expr()
@@ -1470,7 +1474,7 @@ class Parser:
             and_tail_node = self.parse_and_tail()
             return ASTNode('and_expr', children=[rela_expr_node, and_tail_node])
         else:
-            self.error(f"[119] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[119] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <and_tail>
@@ -1488,7 +1492,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"[120-121] Expected relational expression or boolean after '&&' operator")
+                self.error(f"[120-121] Expected relational expression or boolean after '&&' operator, got '{next_tok}'")
                 raise StopIteration
 
             rela_expr_node = self.parse_rela_expr()
@@ -1514,7 +1518,7 @@ class Parser:
             rela_tail_node = self.parse_rela_tail()
             return ASTNode('rela_expr', children=[arith_expr_node, rela_tail_node])
         else:
-            self.error(f"[122] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[122] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <rela_tail>
@@ -1532,7 +1536,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"[122-123] Expected expression after '{rela_sym_node.children[0].value}' operator")
+                self.error(f"[122-123] Expected expression after '{rela_sym_node.children[0].value}' operator, got '{next_tok}'")
                 raise StopIteration
 
             arith_expr_node = self.parse_arith_expr()
@@ -1619,7 +1623,7 @@ class Parser:
             arith_tail_node = self.parse_arith_tail()
             return ASTNode('arith_expr', children=[term_node, arith_tail_node])
         else:
-            self.error(f"[136] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[136] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <arith_tail>
@@ -1637,7 +1641,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"[137-138] Expected expression after '{arith_op1_node.children[0].value}' operator")
+                self.error(f"[137-138] Expected expression after '{arith_op1_node.children[0].value}' operator, got '{next_tok}'")
                 raise StopIteration
 
             term_node = self.parse_term()
@@ -1663,7 +1667,7 @@ class Parser:
             term_tail_node = self.parse_term_tail()
             return ASTNode('term', children=[factor_node, term_tail_node])
         else:
-            self.error(f"[139] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[139] Expected '(', identifier, value literal, got '{current}'")
             raise StopIteration
 
 
@@ -1683,7 +1687,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"[140-141] Expected expression after '{arith_op2_node.children[0].value}' operator")
+                self.error(f"[140-141] Expected expression after '{arith_op2_node.children[0].value}' operator, got '{next_tok}'")
                 raise StopIteration
 
             factor_node = self.parse_factor()
@@ -1709,7 +1713,7 @@ class Parser:
             primary_node = self.parse_primary()
             return ASTNode('factor', children=[primary_node])
         else:
-            self.error(f"[142] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[142] Expected '(', identifier, or value literal, got '{current}'")
             raise StopIteration
 
 
@@ -1881,7 +1885,7 @@ class Parser:
             expr_node = self.parse_expr()
             return ASTNode('cond_stat', children=[expr_node])
         else:
-            self.error(f"[157] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[157] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <switch_stat>
@@ -2174,7 +2178,7 @@ class Parser:
         elif current == ')':
             return ASTNode('param_opts_empty')
         else:
-            self.error(f"[183-184] Expected '(', ')', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[183-184] Expected '(', ')', identifier, value literal, got '{current}'")
 
     # <param_list>
     # Production 185: param_list → <param_item> <param_tail>
@@ -2189,7 +2193,7 @@ class Parser:
             param_tail_node = self.parse_param_tail()
             return ASTNode('param_opts', children=[param_item_node, param_tail_node])
         else:
-            self.error(f"[185] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[185] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <param_item>
@@ -2204,7 +2208,7 @@ class Parser:
             expr_node = self.parse_expr()
             return ASTNode('param_item', children=[expr_node])
         else:
-            self.error(f"[186] Expected '(', identifier, value literal, or function call, got '{current}'")
+            self.error(f"[186] Expected '(', identifier, value literal, got '{current}'")
 
 
     # <param_tail>
