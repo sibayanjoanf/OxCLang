@@ -935,17 +935,15 @@ class Parser:
 
 
     # <pdim_size>
-    # Production 67: pdim_size → <arith_expr>
-    # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
-    #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
+    # Production 67: pdim_size → int_lit
+    # PREDICT = {int_lit}
 
     def parse_pdim_size(self):
         current = self.peek()
 
-        if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
-            arith_expr_node = self.parse_arith_expr()
-            return ASTNode('pdim_size', children=[arith_expr_node])
+        if current == 'int_lit':
+            litvalue = self.match('int_lit')
+            return ASTNode('value', value=litvalue.value)
         else:
             self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
 
@@ -964,8 +962,8 @@ class Parser:
             self.match(',')
             data_type_node = self.parse_data_type()
             id_no = self.check_id()
-            params_dim_node = self.parse_params_dim
-            params_tail_node = self.parse_params_tail
+            params_dim_node = self.parse_params_dim()
+            params_tail_node = self.parse_params_tail()
             return ASTNode('params_tail', children=[data_type_node, id_no, params_dim_node, params_tail_node])
         elif current == ')':
             return ASTNode('params_tail_empty')
