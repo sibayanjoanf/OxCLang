@@ -35,7 +35,7 @@ def term_dlm(char):
         return False
     return (char in wspace or
             char.isalpha() or
-            char == '}')
+            char in '})')
     
 def num_dlm(char):
     if char == '':
@@ -87,7 +87,7 @@ def equal_dlm(char):
 def not_dlm(char):
     if char == '':
         return False
-    return (char.isalpha() or
+    return (char in wspace or 
             char == '(')
 
 def eqto_dlm(char):
@@ -202,7 +202,7 @@ def openpare_dlm(char):
         return False
     return (char in wspace or 
             char.isalnum() or
-            char in '"\'()-!')
+            char in '"\'()+-!')
 
 def opensqua_dlm(char):
     if char == '':

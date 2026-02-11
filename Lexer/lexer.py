@@ -1036,6 +1036,8 @@ class Lexer:
                     else:
                         self.error(f"invalid character after '||': {self.peek()}", start_line, start_col)
                         return True
+            else:
+                self.error(f"'|' is not recognized. (Did you mean '||'?)", self.line, self.column)
             return True
         
         # structure - :, ., ~, ,
