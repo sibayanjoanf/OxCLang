@@ -1143,7 +1143,7 @@ class Parser:
             return ASTNode('id_stat_tail', children=[unary_op_node])
         elif current in ['=', '+=', '-=', '*=', '/=', '%=']:
             assignment_node = self.parse_assignment()
-            return ASTNode('identifier_stat', children=[assignment_node])
+            return ASTNode('id_stat_tail', children=[assignment_node])
         else:
             self.error(f"Expected ++, --,  =, +=, -=, *=, /=, %=, got '{current}'")
 
@@ -2305,7 +2305,7 @@ class Parser:
                         'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
             param_item_node = self.parse_param_item()
             param_tail_node = self.parse_param_tail()
-            return ASTNode('param_opts', children=[param_item_node, param_tail_node])
+            return ASTNode('param_list', children=[param_item_node, param_tail_node])
         else:
             self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
 

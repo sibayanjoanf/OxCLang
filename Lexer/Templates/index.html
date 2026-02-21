@@ -110,7 +110,8 @@
             lineNumbers.textContent = lineNumbersHtml;
         }
 
-        function displayResults(allTokens, lexicalErrors, syntaxErrors, syntaxInitialized) {
+        function displayResults(allTokens, lexicalErrors, syntaxErrors, syntaxInitialized, semanticErrors, semanticWarnings) {
+            semanticWarnings = semanticWarnings || [];
             const validTokens = allTokens.filter(token => !token.is_error);
 
             if (validTokens.length === 0) {
@@ -161,6 +162,19 @@
                         ${error.line > 0 ? `<span class="error-location">[Line ${error.line}, Col ${error.column}]</span>` : ''}
                     </div>
                 `).join('');
+            }
+
+            // Semantic Errors
+            if (semanticErrors && semanticErrors.length > 0) {
+                errorHTML += semanticErrors.map((error) => `
+                    <div class="error-item">
+                        <span class="semantic-impostor" style="color: #c44900; font-weight: bold;">Semantic Impostor:</span>
+                        <span class="error-details">${escapeHtml(error.message)}</span>
+                        ${error.line > 0 ? `<span class="error-location">[Line ${error.line}, Col ${error.column}]</span>` : ''}
+                    </div>
+                `).join('');
+            } else if (syntaxInitialized && (!syntaxErrors || syntaxErrors.length === 0) && (!lexicalErrors || lexicalErrors.length === 0) && (!semanticErrors || semanticErrors.length === 0)) {
+                errorHTML += '<div class="error-item" style="color: #474747;">No semantic errors detected.</div>';
             }
    
 
@@ -236,7 +250,7 @@
             })
             .then(response => response.json())
             .then(data => {
-                displayResults(data.all_tokens, data.errors, [], false);
+                displayResults(data.all_tokens, data.errors, [], false, []);
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -262,7 +276,7 @@
                     syntaxErrors = [{message: data.error, line: 0, column: 0}];
                 }
                 
-                displayResults(data.all_tokens, data.lexical_errors || [], syntaxErrors, true);
+                displayResults(data.all_tokens, data.lexical_errors || [], syntaxErrors, true, data.semantic_errors || []);
                 
                 if (data.success) {
                     // ✅ Parsing successful
@@ -372,7 +386,7 @@
         });
 
         updateLineNumbers();
-        displayResults([], []);
+        displayResults([], [], [], false, []);
     </script>
 </body>
 </html>
