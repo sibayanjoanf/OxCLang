@@ -1,3 +1,6 @@
+import re
+
+
 class SemanticError:
     def __init__(self, message, line=0, column=0):
         self.message = message
@@ -247,6 +250,34 @@ class SemanticAnalyzer:
                     return loc
         return (0, 0)
 
+    def _validate_string_interpolation(self, string_value, node_for_location=None):
+        """Case 2: Validate that every @{identifier} in a string is declared in scope."""
+        if not string_value or not isinstance(string_value, str) or '@{' not in string_value:
+            return
+        for id_str in re.findall(r'@\{([^}]+)\}', string_value):
+            id_str = id_str.strip()
+            if not id_str:
+                continue
+            # Resolve: symbol table may use token (id1); identifier_map gives token->value
+            found = False
+            for scope in reversed(self.scopes):
+                for key in scope:
+                    if self.get_actual_name(key) == id_str:
+                        found = True
+                        break
+                if found:
+                    break
+            if not found:
+                line, col = (0, 0)
+                if node_for_location is not None:
+                    line, col = self._find_value_location(node_for_location)
+                if line == 0 and col == 0:
+                    line, col = self.get_literal_location(string_value)
+                self.error(
+                    f"Undeclared identifier '{id_str}' in string interpolation",
+                    line, col,
+                )
+
     # ====================== Main Entry ======================
 
     def analyze(self):
@@ -342,6 +373,7 @@ class SemanticAnalyzer:
                     elif first_child.type == 'operator' and first_child.value == '=':
                         if len(norm_dec.children) > 1:
                             init_expr = norm_dec.children[1]
+                            self.generic_visit(init_expr)  # Traverse so identifiers (e.g. y in int x = y~) are validated
                             init_type = self._get_expression_type(init_expr)
                             if init_type and not self._types_compatible(data_type, init_type):
                                 line, col = self.get_location(identifier)
@@ -386,6 +418,7 @@ class SemanticAnalyzer:
                         elif first_child.type == 'operator' and first_child.value == '=':
                             if len(norm_dec.children) > 1:
                                 init_expr = norm_dec.children[1]
+                                self.generic_visit(init_expr)  # Traverse so identifiers in initializer are validated
                                 init_type = self._get_expression_type(init_expr)
                                 if init_type and not self._types_compatible(data_type, init_type):
                                     line, col = self.get_location(identifier)
@@ -414,7 +447,7 @@ class SemanticAnalyzer:
         first_child = node.children[0]
         
         if first_child.type == 'struct_const':
-            self.visit(first_child)
+            self._visit_struct_const(first_child)
             return
         
         data_type = None
@@ -454,6 +487,45 @@ class SemanticAnalyzer:
             
             if len(node.children) > 2:
                 self._check_const_initialization(node.children[2], data_type, identifier, actual_name)
+
+    def _visit_struct_const(self, node):
+        """Handle wind gust constant: declare (global or local) with is_constant=True and validate full init."""
+        if not node.children or len(node.children) < 4:
+            return
+        struct_type = getattr(node.children[0], 'value', None)
+        var_name = getattr(node.children[1], 'value', None)
+        const_1d_node = node.children[3]
+        if not struct_type or not var_name:
+            return
+        struct_def = self.get_structure(struct_type)
+        if not struct_def:
+            struct_symbol = self.lookup(struct_type)
+            if not struct_symbol or not struct_symbol.get('is_structure'):
+                line, col = self.get_location(struct_type)
+                actual_name = self.get_actual_name(struct_type)
+                self.error(f"Undefined structure type '{actual_name}'", line, col)
+        init_values = []
+        self._collect_const_1d_values(const_1d_node, init_values)
+        actual_var = self.get_actual_name(var_name)
+        if struct_def and len(struct_def) > 0 and len(init_values) != len(struct_def):
+            line, col = self.get_location(var_name)
+            self.error(
+                f"Constant structure '{actual_var}' must be fully initialized: "
+                f"expects {len(struct_def)} value(s), got {len(init_values)}",
+                line, col,
+            )
+        elif init_values:
+            self._validate_struct_init_values(struct_type, init_values, var_name)
+        if self.is_global_scope():
+            if not self.declare_global(var_name, 'struct_instance', struct_type,
+                                      is_constant=True, struct_type=struct_type):
+                line, col = self.get_location(var_name)
+                self.error(f"Constant '{actual_var}' is already declared in this scope", line, col)
+        else:
+            if not self.declare_symbol(var_name, 'struct_instance', struct_type,
+                                       is_constant=True, struct_type=struct_type):
+                line, col = self.get_location(var_name)
+                self.error(f"Constant '{actual_var}' is already declared in this scope", line, col)
     
     def _check_const_initialization(self, node, expected_type, const_name, actual_name=None):
         if not node.children:
@@ -546,6 +618,21 @@ class SemanticAnalyzer:
                         line, col = self.get_location(identifier)
                         actual_name = self.get_actual_name(identifier)
                         self.error(f"Structure '{actual_name}' must have at least one member", line, col)
+                    has_nesting = False
+                    for member_name, member_type in members.items():
+                        if member_type in self.structures:
+                            line, col = self.get_location(identifier)
+                            actual_name = self.get_actual_name(identifier)
+                            actual_member = self.get_actual_name(member_name)
+                            self.error(
+                                f"Nesting prohibited: structure '{actual_name}' cannot have member "
+                                f"'{actual_member}' of type gust (gust cannot be defined inside another gust)",
+                                line, col,
+                            )
+                            has_nesting = True
+                            break
+                    if has_nesting:
+                        return
                     if not self.define_structure(identifier, members):
                         line, col = self.get_location(identifier)
                         actual_name = self.get_actual_name(identifier)
@@ -576,18 +663,18 @@ class SemanticAnalyzer:
     
     def _validate_struct_init(self, struct_tail, struct_type, var_name):
         """Validate structure initialization values against member types."""
+        init_values = []
+        self._collect_struct_init_values(struct_tail, init_values)
+        if init_values:
+            self._validate_struct_init_values(struct_type, init_values, var_name)
+
+    def _validate_struct_init_values(self, struct_type, init_values, var_name):
+        """Validate a list of initializer value nodes against struct member types (full init + positional types)."""
         struct_def = self.get_structure(struct_type)
         if not struct_def:
             return
-        
         member_types = list(struct_def.values())
-        
-        init_values = []
-        self._collect_struct_init_values(struct_tail, init_values)
-        
-        if not init_values:
-            return
-        
+        member_names = list(struct_def.keys())
         actual_var = self.get_actual_name(var_name)
         if len(init_values) != len(member_types):
             line, col = self.get_location(var_name)
@@ -597,8 +684,6 @@ class SemanticAnalyzer:
                 line, col,
             )
             return
-        
-        member_names = list(struct_def.keys())
         for i, (val_node, expected_type) in enumerate(zip(init_values, member_types)):
             val_type = self._get_expression_type(val_node)
             if val_type and not self._types_compatible(expected_type, val_type):
@@ -625,6 +710,21 @@ class SemanticAnalyzer:
                     pass
                 else:
                     self._collect_struct_init_values(child, values)
+
+    def _collect_const_1d_values(self, node, values):
+        """Collect initializer expression nodes from const_1d (output + element_tail) for wind gust."""
+        if not hasattr(node, 'children') or not node.children:
+            return
+        if node.type == 'const_1d':
+            if node.children[0].type == 'output' and node.children[0].children:
+                values.append(node.children[0].children[0])
+            if len(node.children) > 1:
+                self._collect_const_1d_values(node.children[1], values)
+        elif node.type == 'element_tail' and node.children:
+            if node.children[0].type == 'output' and node.children[0].children:
+                values.append(node.children[0].children[0])
+            if len(node.children) > 1:
+                self._collect_const_1d_values(node.children[1], values)
     
     def _extract_struct_members(self, struct_tail):
         members = {}
@@ -866,6 +966,49 @@ class SemanticAnalyzer:
             return
         
         actual_name = self.get_actual_name(identifier) if identifier else None
+        
+        # Check if this is struct member assignment (e.g. John.name = "John"~)
+        # id_stat_body has children [id_access, id_stat_tail]; assignment is inside id_stat_tail
+        id_access_for_member = None
+        assignment_node = None
+        for child in node.children:
+            if child.type == 'id_access' and len(child.children) >= 2 and child.children[0] == '.':
+                id_access_for_member = child
+            elif child.type == 'assignment':
+                assignment_node = child
+            elif child.type == 'id_stat_tail' and child.children:
+                first = child.children[0]
+                if getattr(first, 'type', None) == 'assignment':
+                    assignment_node = first
+        
+        if id_access_for_member is not None and assignment_node is not None and identifier:
+            # Member assignment: validate member, constant, and RHS type
+            member_id = id_access_for_member.children[1]
+            member_id_value = member_id.value if hasattr(member_id, 'value') else None
+            if member_id_value is not None:
+                member_type = self._validate_struct_member_access(identifier, member_id_value)
+                symbol = self.lookup(identifier)
+                if symbol and symbol.get('is_constant'):
+                    line, col = self.get_location(identifier)
+                    self.error(
+                        f"Content of constant gust cannot be modified",
+                        line, col,
+                    )
+                elif member_type:
+                    expr_node = None
+                    for c in assignment_node.children:
+                        if hasattr(c, 'type') and c.type == 'expr':
+                            expr_node = c
+                            break
+                    if expr_node:
+                        expr_type = self._get_expression_type(expr_node)
+                        if expr_type and not self._types_compatible(member_type, expr_type):
+                            line, col = self.get_location(identifier)
+                            self.error(
+                                f"Type mismatch: cannot assign '{expr_type}' to member '{self.get_actual_name(member_id_value)}' of type '{member_type}'",
+                                line, col,
+                            )
+            return
         
         for child in node.children:
             if child.type == 'param_opts':
@@ -1249,12 +1392,22 @@ class SemanticAnalyzer:
 
     def _validate_exhale_output(self, output_node):
         """Per spec v11: expressions (arithmetic, relational, logical) are not allowed as exhale output.
-        Only identifiers, function calls, literals, and string/char concatenation are permitted."""
+        Only identifiers, function calls, literals, and string/char concatenation are permitted.
+        Whole gusts cannot be displayed; must access a member (e.g. Doe.studentName)."""
         if not output_node or not output_node.children:
             return
         self._check_output_no_expression(output_node)
         # Resolve type so struct member access is validated (e.g. Doe.studendfGrade → error if not a member)
-        self._get_expression_type(output_node)
+        expr_type = self._get_expression_type(output_node)
+        # Output semantics: exhale cannot display a whole gust; must access a member
+        if expr_type and self.get_structure(expr_type) is not None:
+            line, col = self.get_node_location(output_node)
+            if line == 0 and col == 0:
+                line, col = self.get_location('exhale')
+            self.error(
+                "Must access member; whole gusts cannot be displayed",
+                line, col,
+            )
 
     def _check_output_no_expression(self, node):
         """Recursively check that an output node does not contain arithmetic, relational, or logical expressions."""
@@ -1339,6 +1492,8 @@ class SemanticAnalyzer:
         
         # Leaf: literal value
         if node.type == 'value':
+            if node.value and isinstance(node.value, str) and '"' in node.value:
+                self._validate_string_interpolation(node.value, node)
             return self._get_value_type(node.value)
         
         # Identifier: standalone or with id_tail (e.g. Doe.studentName)
@@ -1348,11 +1503,18 @@ class SemanticAnalyzer:
                 if symbol:
                     return symbol['data_type']
                 return None
-            # identifier → id id_tail with id_tail → id_access . member
+            # identifier → id id_tail with id_tail → param_opts (call) or id_access . member
             if hasattr(node, 'children') and node.children and len(node.children) >= 2:
                 first = node.children[0]
                 id_tail = node.children[1]
                 if first.type == 'identifier' and hasattr(first, 'value') and id_tail.type == 'id_tail':
+                    if id_tail.children and id_tail.children[0].type == 'param_opts':
+                        # Case 1: Function call in expression (e.g. string x = hello()~)
+                        self._check_function_call(first.value, id_tail.children[0])
+                        symbol = self.lookup(first.value)
+                        if symbol and symbol.get('is_function'):
+                            return symbol.get('return_type') or 'vacuum'
+                        return None
                     base_type = self._get_expression_type(first)
                     if not base_type:
                         return None
@@ -1371,6 +1533,8 @@ class SemanticAnalyzer:
         # String/char literal in output context
         if node.type == 'output_content':
             value = node.value
+            if value and isinstance(value, str) and '"' in value:
+                self._validate_string_interpolation(value, node)
             if value and len(value) >= 2:
                 if value[0] == '"':
                     return 'string'
