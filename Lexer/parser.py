@@ -55,7 +55,7 @@ class ParseError:
 class Parser:
     FIRST_PRIMARY = {'(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 
                      'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                     'int_lit', 'float_lit', 'yuh', 'naur', 'char_lit', 'string_lit', '!'}
+                     'int_lit', 'float_lit', 'yuh', 'naur', 'char_lit', 'string_lit', '!', '-'}
 
     def __init__(self, tokens):
         self.tokens = tokens
@@ -105,7 +105,7 @@ class Parser:
             self.advance()
             return token
         else:
-            self.error(f"Expected '{expected_type}', got '{self.current_token.type}'")
+            self.error(f"Unexpected token: '{self.current_token.type}' | Expected: '{expected_type}'")
             raise StopIteration
         
     def check_id(self):
@@ -120,7 +120,7 @@ class Parser:
             if self.current_token is None:
                 self.error(f"Expected identifier, but reached end of input.")
             else:
-                self.error(f"Expected 'identifier', got '{self.current_token.type}' ")
+                self.error(f"Unexpected token: '{self.current_token.type}' | Expected 'identifier'")
             raise StopIteration
         
     
@@ -135,7 +135,7 @@ class Parser:
                 ast = self.parse_program()
                 return ast, self.errors
             else:
-                self.error(f"Program must start with 'universal', 'air', or 'atmosphere', got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Program must start with 'universal', 'air', or 'atmosphere'")
                 return None, self.errors
         
         except StopIteration:
@@ -155,13 +155,13 @@ class Parser:
             self.match('{')
             body_node = self.parse_body()
             if self.peek() != '}':
-                self.error(f"Expected '}}' to close atmosphere() function, got '{self.peek()}'")
+                self.error(f"Unexpected token: '{self.peek()}' | Expected '}}' to close atmosphere() function")
             else:
                 self.match('}')
 
             after = self.peek()
             if after:
-                self.error(f"Not expecting tokens after atmosphere() function, got '{after}'.")
+                self.error(f"Unexpected token: '{after}' | Not expecting tokens after atmosphere() function.")
             
             return ASTNode('program', children=[
                 global_dec_node,
@@ -176,10 +176,10 @@ class Parser:
             return None
         
     # <global_dec> 
-    # Production 2: global_dec → universal <declaration> <global_dec>
+    # Production 2: <global_dec> → universal <declaration> <global_dec>
     # PREDICT = {universal}
-    
-    # Production 3: global_dec → λ
+
+    # Production 3: <global_dec> → λ
     # PREDICT = {air, atmosphere}
     
     def parse_global_dec(self):
@@ -195,16 +195,16 @@ class Parser:
             return ASTNode('global_dec_empty')
         
         else:
-            self.error(f"Expected 'universal', 'air', or 'atmosphere', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'universal', 'air', or 'atmosphere'")
     
     # <declaration>
-    # Production 4: declaration → <normal>
+    # Production 4: <declaration> → <normal>
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 5: declaration → <structure>
+    # Production 5: <declaration> → <structure>
     # PREDICT = {gust}
 
-    # Production 6: declaration → wind <constant>
+    # Production 6: <declaration> → wind <constant>
     # PREDICT = {wind}
 
     def parse_declaration(self):
@@ -224,11 +224,11 @@ class Parser:
             return ASTNode('declaration', children=[constant_node])
         
         else:
-            self.error(f"Expected data type (int, float, char, string, bool) or 'gust' or 'wind', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected data type (int, float, char, string, bool) or 'gust' or 'wind'")
     
     
     # <normal>
-    # Production 7: normal → <data_type> id <norm_dec> <norm_tail>~
+    # Production 7: <normal> → <data_type> id <norm_dec> <norm_tail>~
     # PREDICT = {int, float, char, string, bool}
 
     def parse_normal(self):
@@ -247,23 +247,23 @@ class Parser:
                 elif current_tok and current_tok not in [',', '~']:
                     self.error(f"Unexpected '{current_tok}' in declaration - expected ',' or '~'")
                 else:
-                    self.error(f"Expected '~' to end declaration, got '{current_tok}'")
+                    self.error(f"Unexpected token: '{current}' | Expected '~' to end declaration")
                 raise StopIteration
 
             self.match('~')        
             return ASTNode('normal', children=[data_type_node, id_no, norm_dec_node, norm_tail_node])
         else: 
-            self.error(f"Expected data type (int, float, char, string, bool) got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected data type (int, float, char, string, bool)")
     
     # <norm_dec>
-    # Production 8: norm_dec → <row_size> <array>
+    # Production 8: <norm_dec> → <row_size> <array>
     # PREDICT = {[}
 
-    # Production 9: norm_dec → = <expr>
+    # Production 9: <norm_dec> → = <expr>
     # PREDICT = {=}
 
-    # Production 10: norm_dec → λ
-    # PREDICT = {,,~}
+    # Production 10: <norm_dec> → λ
+    # PREDICT = {,, ~}
  
     def parse_norm_dec(self):     
         current = self.peek()
@@ -287,13 +287,13 @@ class Parser:
             
             return ASTNode('norm_dec_empty')
         else:
-            self.error(f"Expected '[' or '=' or ',' or terminator '~' got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '[' or '=' or ',' or terminator '~'")
     
     # <norm_tail>
-    # Production 11: norm_tail → , id <norm_dec> <norm_tail>
+    # Production 11: <norm_tail> → , id <norm_dec> <norm_tail>
     # PREDICT = {,}
 
-    # Production 12: norm_tail → λ
+    # Production 12: <norm_tail> → λ
     # PREDICT = {~}
 
     def parse_norm_tail(self):
@@ -308,14 +308,14 @@ class Parser:
         elif current == '~':
             return ASTNode('norm_tail_empty')
         else:
-            self.error(f"Expected ',' or terminator '~' got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ',' or terminator '~'")
 
     # <array>
-    # Production 13: array → = {<arr_element>}
+    # Production 13: <array> → = {<arr_element>}
     # PREDICT = {=}
 
-    # Production 14: array → λ
-    # PREDICT = {,,~}
+    # Production 14: <array> → λ
+    # PREDICT = {,, ~}
 
     def parse_array(self):
         current = self.peek()
@@ -329,13 +329,13 @@ class Parser:
         elif current in [',','~']:
             return ASTNode('array_empty')
         else:
-            self.error(f"Expected '=' or ',' or terminator '~' got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '=' or ',' or terminator '~'")
 
     # <arr_element>
-    # Production 15: arr_element → <1d_element>
+    # Production 15: <arr_element> → <1d_element>
     # PREDICT = {++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, }}
 
-    # Production 16: arr_element → <2d_element>
+    # Production 16: <arr_element> → <2d_element>
     # PREDICT = {{}
 
     def parse_arr_element(self):
@@ -349,16 +349,14 @@ class Parser:
             twod_element_node = self.parse_2d_element()
             return ASTNode('arr_element', children=[twod_element_node])
         else:
-            self.error("Expected int_lit, float_lit, yuh, naur, char_lit, or string_lit or '}'"
-                        f"got '{current}'"
-                       )
+            self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, yuh, naur, char_lit, or string_lit or '}}'")
 
 
     # <1d_element>
-    # Production 17: 1d_element → <output> <element_tail>
+    # Production 17: <1d_element> → <output> <element_tail>
     # PREDICT = {++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit}
 
-    # Production 18: 1d_element → λ
+    # Production 18: <1d_element> → λ
     # PREDICT = {}}
 
     def parse_1d_element(self):
@@ -372,11 +370,11 @@ class Parser:
         elif current == '}':
             return ASTNode('1d_element_node_empty')
         else:
-            self.error(f"Expected int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}")
+            self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, yuh, naur, char_lit, or string_lit or '}}'")
 
 
     # <2d_element>
-    # Production 19: 2d_element → {<1d_element>} <2d_tail>
+    # Production 19: <2d_element> → {<1d_element>} <2d_tail>
     # PREDICT = {{}
 
     def parse_2d_element(self):
@@ -389,16 +387,13 @@ class Parser:
             twod_tail_node = self.parse_2d_tail()
             return ASTNode('2d_element', children=[oned_element_node, twod_tail_node])
         else:
-            self.error("Expected '{', "
-                        f"got '{current}'"
-                       )
-
+            self.error(f"Unexpected token: '{current}' | Expected '{{' ")
 
     # <element_tail>
-    # Production 20: element_tail → , <output> <element_tail>
+    # Production 20: <element_tail> → , <output> <element_tail>
     # PREDICT = {,}
 
-    # Production 21: element_tail → λ
+    # Production 21: <element_tail> → λ
     # PREDICT = {}}
 
     def parse_element_tail(self):
@@ -412,15 +407,14 @@ class Parser:
         elif current == '}':
             return ASTNode('element_tail_empty')
         else:
-            self.error("Expected ',' or '}' "
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ',' or '}}' ")
 
 
     # <2d_tail>
-    # Production 22: 2d_tail → , {<1d_element>} <2d_tail>
+    # Production 22: <2d_tail> → , {<1d_element>} <2d_tail>
     # PREDICT = {,}
 
-    # Production 23: 2d_tail → λ
+    # Production 23: <2d_tail> → λ
     # PREDICT = {}}
 
     def parse_2d_tail(self):
@@ -436,12 +430,11 @@ class Parser:
         elif current == '}':
             return ASTNode('2d_tail_empty')
         else:
-            self.error("Expected ',' or '}' "
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ',' or '}}' ")
 
 
     # <structure>
-    # Production 24: structure → gust id <struct_tail>~
+    # Production 24: <structure> → gust id <struct_tail>~
     # PREDICT = {gust}
 
     def parse_structure(self):
@@ -454,13 +447,13 @@ class Parser:
             self.match('~')
             return ASTNode('structure', children=[id_no, struct_tail_node])
         else:
-            self.error(f"Expected 'gust', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'gust'")
 
     # <struct_tail>
-    # Production 25: struct_tail → { <data_type> id~ <gust_tail> }
+    # Production 25: <struct_tail> → { <data_type> id~ <gust_tail> }
     # PREDICT = {{}
 
-    # Production 26: struct_tail → id <struct_tail2>
+    # Production 26: <struct_tail> → id <struct_tail2>
     # PREDICT = {id}
 
     def parse_struct_tail(self):
@@ -479,14 +472,13 @@ class Parser:
             struct_tail2_node = self.parse_struct_tail2()
             return ASTNode('struct_tail', children=[id_no, struct_tail2_node])
         else:
-            self.error("Expected '{' or identifier, "
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '{{' or identifier, ")
 
     # <struct_tail2>
-    # Production 27: struct_tail2 → = {<1d_element>}
+    # Production 27: <struct_tail2> → = {<1d_element>}
     # PREDICT = {=}
 
-    # Production 28: struct_tail2 → λ
+    # Production 28: <struct_tail2> → λ
     # PREDICT = {~}
 
     def parse_struct_tail2(self):
@@ -501,15 +493,15 @@ class Parser:
         elif current == '~':
             return ASTNode('struct_tail2_empty')
         else:
-            self.error(f"Expected '=' or '~', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '=' or '~'")
 
 
 
     # <gust_tail>
-    # Production 29: gust_tail → <data_type> id~ <gust_tail>
+    # Production 29: <gust_tail> → <data_type> id~ <gust_tail>
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 30: gust_tail → λ
+    # Production 30: <gust_tail> → λ
     # PREDICT = {}}
 
     def parse_gust_tail(self):
@@ -524,15 +516,14 @@ class Parser:
         elif current == '}':
             return ASTNode('gust_tail_empty')
         else:
-            self.error("Expected data type or '}', "
-                            f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected data type (int, float, char, string, bool) or '}}', ")
 
 
     # <constant>
-    # Production 31: constant → <data_type> id <const_dec>~
+    # Production 31: <constant> → <data_type> id <const_dec>~
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 32: constant → <struct_const>
+    # Production 32: <constant> → <struct_const>
     # PREDICT = {gust}
 
     def parse_constant(self):
@@ -548,14 +539,14 @@ class Parser:
             struct_const_node = self.parse_struct_const()
             return ASTNode('constant', children=[struct_const_node])
         else:
-            self.error(f"Expected data type or gust, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected data type (int, float, char, string, bool) or gust")
 
 
     # <const_dec>
-    # Production 33: const_dec → = <literal> <const_tail>
+    # Production 33: <const_dec> → = <literal> <const_tail>
     # PREDICT = {=}
 
-    # Production 34: const_dec → <row_size> = {<const_arr>} <const_tail>
+    # Production 34: <const_dec> → <row_size> = {<const_arr>} <const_tail>
     # PREDICT = {[}
 
     def parse_const_dec(self):
@@ -575,15 +566,15 @@ class Parser:
             const_tail_node = self.parse_const_tail()
             return ASTNode('const_dec', children=[row_size_node, ASTNode('operator', value='='), const_arr_node, const_tail_node])
         else:
-            self.error(f"Constant declaration needs intialization. Expected '=' or '[', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Constant declaration needs intialization. Expected '=' or '['")
 
 
     # <const_tail>
-    # Production 35: const_tail → , id <const_dec>
+    # Production 35: <const_tail> → , id <const_dec>
     # PREDICT = {,}
 
-    # Production 36: const_tail → λ
-    # PREDICT = {~}
+    # Production 36: <const_tail> → λ
+    # PREDICT = {~} 
 
     def parse_const_tail(self):
         current = self.peek()
@@ -596,14 +587,14 @@ class Parser:
         elif current == '~':
             return ASTNode('const_tail_empty')
         else:
-            self.error(f"Expected ',' or '~', got '{current}' ")
+            self.error(f"Unexpected token: '{current}' | Expected ',' or '~'")
 
 
     # <const_arr>
-    # Production 37: const_arr → <const_1d>
-    # PREDICT = { ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit }
+    # Production 37: <const_arr> → <const_1d>
+    # PREDICT = {++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit}
 
-    # Production 38: const_arr → <const_2d>
+    # Production 38: <const_arr> → <const_2d>
     # PREDICT = {{}
 
     def parse_const_arr(self):
@@ -617,13 +608,12 @@ class Parser:
             const_2d_node = self.parse_const_2d()
             return ASTNode('const_arr', children=[const_2d_node])
         else:
-            self.error("Expected int_lit, float_lit, yuh, naur, char_lit, string_lit or '{', " 
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, yuh, naur, char_lit, string_lit or '{{', ")
 
 
     # <const_1d>
-    # Production 39: const_1d → <output> <element_tail>
-    # PREDICT = { ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit }
+    # Production 39: <const_1d> → <output> <element_tail>
+    # PREDICT = {++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit}
 
     def parse_const_1d(self):
         current = self.peek()
@@ -634,11 +624,11 @@ class Parser:
             element_tail_node = self.parse_element_tail()
             return ASTNode('const_1d', children=[output_node, element_tail_node])
         else:
-            self.error(f"Expected int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <const_2d>
-    # Production 40: const_2d → {<const_1d>} <const_2d_tail>
+    # Production 40: <const_2d> → {<const_1d>} <const_2d_tail>
     # PREDICT = {{}
 
     def parse_const_2d(self):
@@ -651,14 +641,14 @@ class Parser:
             const_2d_tail_node = self.parse_const_2d_tail()
             return ASTNode('const_2d', children=[const_1d_node, const_2d_tail_node])
         else:
-            self.error(f"Expected '{{', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '{{'")
 
 
     # <const_2d_tail>
-    # Production 41: const_2d_tail → , {<const_1d>} <const_2d_tail>
+    # Production 41: <const_2d_tail> → , {<const_1d>} <const_2d_tail>
     # PREDICT = {,}
 
-    # Production 42: const_2d_tail → λ
+    # Production 42: <const_2d_tail> → λ
     # PREDICT = {}}
 
     def parse_const_2d_tail(self):
@@ -674,12 +664,11 @@ class Parser:
         elif current == '}':
             return ASTNode('const_2d_tail_empty')
         else:
-            self.error("Expected ',' or '{', "
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ',' or '{{', ")
 
 
     # <struct_const>
-    # Production 43: struct_const → gust id id = {<const_1d>}~
+    # Production 43: <struct_const> → gust id id = {<const_1d>}~
     # PREDICT = {gust}
 
     def parse_struct_const(self):
@@ -696,14 +685,14 @@ class Parser:
             self.match('~')
             return ASTNode('struct_const', children=[id_no, id_no2, ASTNode('operator', value='='), const_1d_node])
         else:
-            self.error(f"Expected 'gust', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'gust'")
 
 
     # <dimension>
-    # Production 44: dimension → <row_size>
+    # Production 44: <dimension> → <row_size>
     # PREDICT = {[}
 
-    # Production 45: dimension → λ
+    # Production 45: <dimension> → λ
     # PREDICT = {~, ++, --,  =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, } }
 
     def parse_dimension(self):
@@ -717,12 +706,11 @@ class Parser:
                         ',', ')', '||', '&&', '}' ]:
             return ASTNode('dimension_empty')
         else:
-            self.error("Expected '~', '++', '--', operator, ')', '}'" 
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '~', '++', '--', '=', '+=', '-=', '*=', '/=', '%=', '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=', ')', '}}'")
 
 
     # <row_size>
-    # Production 46: row_size → [<size>] <col_size>
+    # Production 46: <row_size> → [<size>] <col_size>
     # PREDICT = {[}
 
     def parse_row_size(self):
@@ -748,14 +736,14 @@ class Parser:
             col_size_node = self.parse_col_size()
             return ASTNode('row_size', children=[size_node, col_size_node])
         else:
-            self.error(f"Expected '[', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '['")
 
 
     # <col_size>
-    # Production 47: col_size → [<pdim_size>]
+    # Production 47: <col_size> → [<pdim_size>]
     # PREDICT = {[}
 
-    # Production 48: col_size → λ
+    # Production 48: <col_size> → λ
     # PREDICT = {~, ++, --,  =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, } }
 
     def parse_col_size(self):
@@ -782,32 +770,31 @@ class Parser:
                         ',', ')', '||', '&&', '}' ]:
             return ASTNode('col_size_empty')
         else:
-            self.error("Expected '[', '}', identifier, '~', operator, statement, or 'gasp', " 
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '[', '}}', identifier, '~', '=', '+=', '-=', '*=', '/=', '%=', '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=', statement, or 'gasp', ")
 
 
     # <size>
-    # Production 49: size → <arith_expr>
+    # Production 49: <size> → <arith_expr>
     # PREDICT = {(, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, 
     #               int_lit, float_lit, yuh, naur, char_lit, string_lit, !}
 
-    # Production 50: size → λ
+    # Production 50: <size> → λ
     # PREDICT = {]}
 
     def parse_size(self):
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             arith_expr_node = self.parse_arith_expr()
             return ASTNode('size', children=[arith_expr_node])
         elif current == ']':
             return ASTNode('size_empty')
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, string_lit, or predefined function, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', identifier, int_lit, float_lit, -")
 
     # <data_type>
-    # Production 51–55: data_type → int | float | char | string | bool
+    # Production 51–55: <data_type> → int | float | char | string | bool
     # PREDICT = { int | float | char | string | bool }
 
     def parse_data_type(self):
@@ -829,7 +816,7 @@ class Parser:
             self.match('bool')
             return ASTNode('data_type', value='bool')
         else:
-            self.error(f"Expected data type (int, float, char, string, bool), got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected data type (int, float, char, string, bool)")
 
     # <sub_functions>
     # Production 56: sub_functions → <air_func> <sub_functions>
@@ -848,11 +835,11 @@ class Parser:
         elif current == 'atmosphere':
             return ASTNode('sub_functions_empty')
         else:
-            self.error(f"Expected 'air' or 'atmosphere', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'air' or 'atmosphere'")
 
 
     # <air_func>
-    # Production 58: air_func → air <return_type> id (<params>) { <body> <return_stat> }
+    # Production 58: <air_func> → air <return_type> id (<params>) { <body> <return_stat> }
     # PREDICT = {air}
 
     def parse_air_func(self):
@@ -871,14 +858,14 @@ class Parser:
             self.match('}')
             return ASTNode('air_func', children=[return_type_node, id_no, params_node, body_node, return_stat_node])
         else:
-            self.error(f"Expected 'air', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'air'")
 
 
     # <return_type>
-    # Production 59: return_type → <data_type>
+    # Production 59: <return_type> → <data_type>
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 60: return_type → vacuum
+    # Production 60: <return_type> → vacuum
     # PREDICT = {vacuum}
 
     def parse_return_type(self):
@@ -891,14 +878,14 @@ class Parser:
             self.match('vacuum')
             return ASTNode('return_type', value='vacuum')
         else:
-            self.error(f"Expected data type or 'vacuum', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected data type (int, float, char, string, bool) or 'vacuum'")
 
 
     # <params>
-    # Production 61: params → <data_type> id <params_dim> <params_tail>
+    # Production 61: <params> → <data_type> id <params_dim> <params_tail>
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 62: params → λ
+    # Production 62: <params> → λ
     # PREDICT = {)}
 
     def parse_params(self):
@@ -913,14 +900,14 @@ class Parser:
         elif current == ')':
             return ASTNode('params_empty')
         else:
-            self.error(f"Expected data type or ')', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected data type (int, float, char, string, bool) or ')'")
 
 
     # <params_dim>
-    # Production 63: params_dim → [<pdim_tail>
+    # Production 63: <params_dim> → [<pdim_tail>
     # PREDICT = {[}
 
-    # Production 64: params_dim → λ
+    # Production 64: <params_dim> → λ
     # PREDICT = {,, )}
 
     def parse_params_dim(self):
@@ -933,16 +920,16 @@ class Parser:
         elif current in [',',')']:
             return ASTNode('params_dim_node')
         else:
-            self.error(f"Expected '[' or ',' or ')', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '[' or ',' or ')'")
 
 
     # <pdim_tail>
-    # Production 65: pdim_tail → ]
+    # Production 65: <pdim_tail> → ]
     # PREDICT = {]}
 
-    # Production 66: pdim_tail → <pdim_size>] [<pdim_size>]
+    # Production 66: <pdim_tail> → <pdim_size>] [<pdim_size>]
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
-    #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
+    #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !, -}
 
     def parse_pdim_tail(self):
         current = self.peek()
@@ -951,7 +938,7 @@ class Parser:
             self.match(']')
             return ASTNode('params_pdim_tail', value=']')
         elif current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             pdim_size_node = self.parse_pdim_size()
             self.match(']')
             self.match('[')
@@ -959,28 +946,30 @@ class Parser:
             self.match(']')
             return ASTNode('params_pdim_tail', children=[pdim_size_node, pdim_size_node2])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ']', '(', identifier, int_lit, float_lit, '-'")
 
 
     # <pdim_size>
-    # Production 67: pdim_size → int_lit
-    # PREDICT = {int_lit}
+    # Production 67: <pdim_size> → <arith_expr>
+    # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
+    #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !, -}
 
     def parse_pdim_size(self):
         current = self.peek()
 
-        if current == 'int_lit':
-            litvalue = self.match('int_lit')
-            return ASTNode('value', value=litvalue.value)
+        if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
+            arith_expr_node = self.parse_arith_expr()
+            return ASTNode('pdim_size', children=[arith_expr_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', identifier, int_lit, float_lit, '-'")
 
 
     # <params_tail>
-    # Production 68: params_tail → , <data_type> id <params_dim> <params_tail>
+    # Production 68: <params_tail> → , <data_type> id <params_dim> <params_tail>
     # PREDICT = {,}
 
-    # Production 69: params_tail → λ
+    # Production 69: <params_tail> → λ
     # PREDICT = {)}
 
     def parse_params_tail(self):
@@ -996,11 +985,11 @@ class Parser:
         elif current == ')':
             return ASTNode('params_tail_empty')
         else:
-            self.error(f"Expected ',' or ')', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ',' or ')'")
 
 
     # <body>
-    # Production 70: body → <stmt_list>
+    # Production 70: <body> → <stmt_list>
     # PREDICT = { int, float, char, string, bool, gust, wind, inhale, exhale, ++, --, id, if, stream, cycle, echo, do, }, gasp }
 
     def parse_body(self):
@@ -1013,16 +1002,16 @@ class Parser:
         elif current == None:
             return ASTNode('body_empty')
         else:
-            self.error(f"Invalid body start. Expected statements ('int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', "
-                            f"'if', 'stream', 'cycle', 'echo', 'do'), got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Invalid body start. Expected statements ('int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', "
+                            "'if', 'stream', 'cycle', 'echo', 'do')")
 
 
 
     # <stmt_list>
-    # Production 71: stmt_list → <statement> <stmt_list>
+    # Production 71: <stmt_list> → <statement> <stmt_list>
     # PREDICT = { int, float, char, string, bool, gust, wind, inhale, exhale, ++, --, id, if, stream, cycle, echo, do }
 
-    # Production 72: stmt_list → λ
+    # Production 72: <stmt_list> → λ
     # PREDICT = {}, gasp, resist}
 
     def parse_stmt_list(self):
@@ -1032,7 +1021,7 @@ class Parser:
                             'if', 'stream', 'cycle', 'echo', 'do'] or (current and current.startswith('id')):
             statement_node = self.parse_statement()
 
-            if statement_node is None:  # Error occurred
+            if statement_node is None: 
                 raise StopIteration
 
             stmt_list_node = self.parse_stmt_list()
@@ -1042,14 +1031,14 @@ class Parser:
         elif current == None:
             raise StopIteration
         else:
-            self.error(f"Expected statements ('int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', "
-                            f"'if', 'stream', 'cycle', 'echo', 'do') got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected statements ('int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', "
+                        "'if', 'stream', 'cycle', 'echo', 'do') or '}'")
             
 
 
 
     # <statement>
-    # Production 73–77: statement → <declaration> | <input_output> | <identifier_stat> | <conditioner> | <iteration>
+    # Production 73–77: <statement> → <declaration> | <input_output> | <identifier_stat> | <conditioner> | <iteration>
     # PREDICT = {int, float, char, string, bool, gust, wind}
     # PREDICT = {inhale, exhale}
     # PREDICT = {++, --, id}
@@ -1075,18 +1064,18 @@ class Parser:
                 iteration_node = self.parse_iteration()
                 return ASTNode('statement', children=[iteration_node])
             else:
-                self.error(f"Invalid statements, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected statements ('int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', "
+                        "'if', 'stream', 'cycle', 'echo', 'do') ")
                 raise StopIteration
         except StopIteration:
-            # Re-raise to propagate up
             raise
 
 
     # <identifier_stat>
-    # Production 78: identifier_stat → <unary_op> id <id_access>~
+    # Production 78: <identifier_stat> → <unary_op> id <id_access>~
     # PREDICT = {++,--}
 
-    # Production 79: identifier_stat → id <id_stat_body>~
+    # Production 79: <identifier_stat> → id <id_stat_body>~
     # PREDICT = {id}
 
     def parse_identifier_stat(self):
@@ -1104,13 +1093,13 @@ class Parser:
             self.match('~')
             return ASTNode('identifier_stat', children=[id_no, id_stat_body_node])
         else:
-            self.error(f"Expected '++' or '--' or identifier, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '++' or '--' or identifier")
 
     # <id_stat_body>
-    # Production 80: id_stat_body → (<param_opts>)
+    # Production 80: <id_stat_body> → (<param_opts>)
     # PREDICT = {(}
 
-    # Production 81: id_stat_body → <id_access> <id_stat_tail>
+    # Production 81: <id_stat_body> → <id_access> <id_stat_tail>
     # PREDICT = {[, .,  ++, --,  =, +=, -=, *=, /=, %=}
 
     def parse_id_stat_body(self):
@@ -1126,13 +1115,13 @@ class Parser:
             id_stat_tail_node = self.parse_id_stat_tail()
             return ASTNode('id_stat_body', children=[id_access_node, id_stat_tail_node])
         else:
-            self.error(f"Expected [, .,  ++, --,  =, +=, -=, *=, /=, %=, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(','[', '.', '++', '--', '=', '+=', '-=', '*=', '/=', '%='")
             
     # <id_stat_tail>
-    # Production 82: id_stat_tail → <unary_op>
+    # Production 82: <id_stat_tail> → <unary_op>
     # PREDICT = { ++, -- }
 
-    # Production 83: id_stat_tail → <assignment>
+    # Production 83: <id_stat_tail> → <assignment>
     # PREDICT = { =, +=, -=, *=, /=, %= }
 
     def parse_id_stat_tail(self):
@@ -1145,13 +1134,13 @@ class Parser:
             assignment_node = self.parse_assignment()
             return ASTNode('id_stat_tail', children=[assignment_node])
         else:
-            self.error(f"Expected ++, --,  =, +=, -=, *=, /=, %=, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '++', '--', '=', '+=', '-=', '*=', '/=', '%='")
 
     # <identifier>
-    # Production 84: identifier → <unary_op> id<id_access>
+    # Production 84: <identifier> → <unary_op> id<id_access>
     # PREDICT = { ++, -- }
 
-    # Production 85: identifier → id<id_tail>
+    # Production 85: <identifier> → id<id_tail>
     # PREDICT = {id}
 
     def parse_identifier(self):
@@ -1167,13 +1156,13 @@ class Parser:
             id_tail_node = self.parse_id_tail()
             return ASTNode('identifier', children=[id_no, id_tail_node])
         else:
-            self.error(f"Expected ++, --, or identifier, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ++, --, or identifier")
 
     # <id_tail>
-    # Production 86: id_tail → (<param_opts>)
+    # Production 86: <id_tail> → (<param_opts>)
     # PREDICT = { ( }
 
-    # Production 87: id_tail → <id_access> <unary_op2>
+    # Production 87: <id_tail> → <id_access> <unary_op2>
     # PREDICT = { [, ., ~, ++, --, =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, } }
 
     def parse_id_tail(self):
@@ -1194,22 +1183,19 @@ class Parser:
             if not self.rela_used:
                 expected += ", >, <, >=, <=, ==, !="
             if self.paren_depth > 0:
-                self.error(f"Expected {expected}, or ) to close, got '{current}'")
-
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ) to close")
             elif self.in_array_size:
-                self.error(f"Expected {expected}, or ] to close, got '{current}'")
-
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ] to close")
             else:
-                self.error(f"Expected {expected}, or ~ to terminate statement, got '{current}'")
-
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ~ to terminate statement")
             raise StopIteration
 
 
     # <id_access>
-    # Production 88: id_access → <dimension>
+    # Production 88: <id_access> → <dimension>
     # PREDICT = { [, ~, ++, --,  =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, } }
 
-    # Production 89: id_access → .id
+    # Production 89: <id_access> → .id
     # PREDICT = {.}
 
 
@@ -1226,19 +1212,19 @@ class Parser:
             return ASTNode('id_access', children=['.', id_no])
 
         elif prodNo == 158:
-            self.error(f"Expected [, ., or closing stream parameters ')', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected [, ., or closing stream parameters ')'")
         else:
             expected = "+, -, *, /, %, ||, &&"
             if not self.rela_used:
                 expected += ", >, <, >=, <=, ==, !="
             if self.paren_depth > 0:
-                self.error(f"Expected {expected}, or ) to close, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ) to close")
 
             elif self.in_array_size:
-                self.error(f"Expected {expected}, or ] to close, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ] to close")
 
             else:
-                self.error(f"Expected {expected}, or ~ to terminate statement, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ~ to terminate statement")
 
             raise StopIteration
 
@@ -1246,7 +1232,7 @@ class Parser:
 
 
     # <unary_op>
-    # Production 90–91: unary_op → ++ | --
+    # Production 90–91: <unary_op> → ++ | --
     # PREDICT = {++ | --}
 
     def parse_unary_op(self):
@@ -1259,14 +1245,14 @@ class Parser:
             self.match('--')
             return ASTNode('unary_op', value='--')
         else:
-            self.error(f"Expected '++' or '--', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '++' or '--'")
                 
 
     # <unary_op2>
-    # Production 92: unary_op2 → <unary_op>
+    # Production 92: <unary_op2> → <unary_op>
     # PREDICT = {++, --}
 
-    # Production 93: unary_op2 → λ
+    # Production 93: <unary_op2> → λ
     # PREDICT = { +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ~, ), ||, &&, } }
 
     def parse_unary_op2(self):
@@ -1278,15 +1264,14 @@ class Parser:
         elif current in ['+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=', ',', '~', ')', '||', '&&', '}']:
             return ASTNode('unary_op2_empty')
         else:
-            self.error("Expected ++, --, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ~, ), ||, &&, }" 
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ++, --, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ~, ), ||, &&, }}")
 
 
     # <input_output>
-    # Production 94: input_output → inhale(id <id_access>)~
+    # Production 94: <input_output> → inhale(id <id_access>)~
     # PREDICT = {inhale}
 
-    # Production 95: input_output → exhale(<output>)~
+    # Production 95: <input_output> → exhale(<output>)~
     # PREDICT = {exhale}
 
     def parse_input_output(self):
@@ -1308,16 +1293,16 @@ class Parser:
             self.match('~')
             return ASTNode('input_output', children=['exhale', output_node])
         else:
-            self.error(f"Expected 'inhale' or 'exhale', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'inhale' or 'exhale'")
 
     # <output>
-    # Production 96: output → <identifier> 
+    # Production 96: <output> → <identifier> 
     # PREDICT = {++, --, id}
 
-    # Production 97: output → <function_call>
+    # Production 97: <output> → <function_call>
     # PREDICT = {toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft}
 
-    # Production 98: output → <literal>
+    # Production 98: <output> → <literal>
     # PREDICT = { int_lit, float_lit, yuh, naur, char_lit, string_lit }
 
 
@@ -1334,13 +1319,13 @@ class Parser:
             literal_node = self.parse_literal()
             return ASTNode('output', children=[literal_node])
         else:
-            self.error(f"Expected '++, --' or function call or character/string literal, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '++, --' or 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft' or 'int_lit', 'float_lit', 'yuh', 'naur', 'char_lit', 'string_lit'")
 
     # <literal>
-    # Production 99: literal → <value>
+    # Production 99: <literal> → <value>
     # PREDICT = { int_lit, float_lit, yuh, naur }
 
-    # Production 100: literal → <output_concat> <output_tail>
+    # Production 100: <literal> → <output_concat> <output_tail>
     # PREDICT = { char_lit, string_lit }
 
 
@@ -1355,10 +1340,10 @@ class Parser:
             output_tail_node = self.parse_output_tail()
             return ASTNode('literal', children=[output_concat_node, output_tail_node])
         else:
-            self.error(f"Expected int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
     # <value>
-    # Production 100–103: value → int_lit | float_lit | yuh | naur
+    # Production 101–104: <value> → int_lit | float_lit | yuh | naur
     # PREDICT = { int_lit | float_lit | yuh | naur }
 
     def parse_value(self):
@@ -1377,10 +1362,10 @@ class Parser:
             litvalue = self.match('naur')
             return ASTNode('value', value=litvalue.value)
         else:
-            self.error(f"Expected int_lit, float_lit, yuh, naur, char_lit, string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, yuh, naur")
 
     # <output_concat>
-    # Production 104–105: output_concat → char_lit | string_lit
+    # Production 105–106: <output_concat> → char_lit | string_lit
     # PREDICT = {char_lit | string_lit}
 
     def parse_output_concat(self):
@@ -1393,13 +1378,13 @@ class Parser:
             litvalue = self.match('string_lit')
             return ASTNode('output_content', value=litvalue.value)
         else:
-            self.error(f"Expected character/string literal, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected char_lit or string_lit")
 
     # <output_tail>
-    # Production 106: output_tail → & <output_concat> <output_tail>
+    # Production 107: <output_tail> → & <output_concat> <output_tail>
     # PREDICT = {&}
 
-    # Production 107: output_tail → λ
+    # Production 108: <output_tail> → λ
     # PREDICT = { +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ~, ), ||, &&, } }
 
     def parse_output_tail(self):
@@ -1413,10 +1398,10 @@ class Parser:
         elif current in ['+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=', ',', '~', ')', '||', '&&', '}']:
             return ASTNode('output_tail_empty')
         else:
-            self.error(f"Expected '&' or operators or terminator '~', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=', '||', '&&', or terminator '~'")
 
     # <assi_op>
-    # Production 108-113: assi_op → = | += | -= | *= | /= | %=
+    # Production 109-114: <assi_op> → = | += | -= | *= | /= | %=
     # PREDICT = {= | += | -= | *= | /= | %=}
 
     def parse_assi_op(self):
@@ -1441,11 +1426,11 @@ class Parser:
             self.match('%=')
             return ASTNode('assi_op', ASTNode('operator', value='%='))
         else:
-            self.error(f"Expected assignment operator, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '=' '+=' '-=' '*=' '/=' '%=' ")
 
 
     # <assignment>
-    # Production 114: assignment → <assi_op> <expr>
+    # Production 115: <assignment> → <assi_op> <expr>
     # PREDICT = {=, +=, -=, *=, /=, %=}
 
     def parse_assignment(self):
@@ -1456,45 +1441,45 @@ class Parser:
             expr_node = self.parse_expr()
             return ASTNode('assignment', children=[assi_op_node, expr_node])
         else:
-            self.error(f"Expected assignment operator, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '=' '+=' '-=' '*=' '/=' '%=' ")
 
 
     # <expr>
-    # Production 115: expr → <logic_expr>
+    # Production 116: <expr> → <logic_expr>
     # PREDICT = { (, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
     def parse_expr(self):
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             logic_expr_node = self.parse_logic_expr()
             return ASTNode('expr', children=[logic_expr_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <logic_expr>
-    # Production 116: logic_expr → <and_expr> <or_tail>
+    # Production 117: <logic_expr> → <and_expr> <or_tail>
     # PREDICT = {(, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
     def parse_logic_expr(self):
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             and_expr_node = self.parse_and_expr()
             or_tail_node = self.parse_or_tail()
             return ASTNode('logic_expr', children=[and_expr_node, or_tail_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <or_tail>
-    # Production 117: or_tail → || <and_expr> <or_tail>
+    # Production 118: <or_tail> → || <and_expr> <or_tail>
     # PREDICT = {||}
 
-    # Production 118: or_tail → λ
+    # Production 119: <or_tail> → λ
     # PREDICT = {~, ,, )}
 
     def parse_or_tail(self):
@@ -1505,7 +1490,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"Expected relational expression factors (int_lit, float_lit, id) or boolean after '||' operator, got '{next_tok}'")
+                self.error(f"Unexpected token: '{next_tok}' | Expected relational expression factors (int_lit, float_lit, char_lit, yuh, naur, id) after '||' operator")
                 raise StopIteration
             
             and_expr_node = self.parse_and_expr()
@@ -1519,11 +1504,11 @@ class Parser:
             if self.paren_depth == 0:
                 expected += " or '~', ','"
 
-            self.error(f"Expected {expected} , got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected {expected}")
 
 
     # <and_expr>
-    # Production 119: and_expr → <rela_expr> <and_tail>
+    # Production 120: <and_expr> → <rela_expr> <and_tail>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1531,19 +1516,19 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             rela_expr_node = self.parse_rela_expr()
             and_tail_node = self.parse_and_tail()
             return ASTNode('and_expr', children=[rela_expr_node, and_tail_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <and_tail>
-    # Production 120: and_tail → && <rela_expr> <and_tail>
+    # Production 121: <and_tail> → && <rela_expr> <and_tail>
     # PREDICT = {&&}
 
-    # Production 121: and_tail → λ
+    # Production 122: <and_tail> → λ
     # PREDICT = { ~, ,, ), || }
 
     def parse_and_tail(self):
@@ -1554,7 +1539,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"Expected relational expression factors (int_lit, float_lit, id) or boolean after '&&' operator, got '{next_tok}'")
+                self.error(f"Unexpected token: '{next_tok}' | Expected relational expression factors (int_lit, float_lit, yuh, naur, id) after '&&' operator")
                 raise StopIteration
 
             rela_expr_node = self.parse_rela_expr()
@@ -1568,11 +1553,11 @@ class Parser:
             if self.paren_depth == 0:
                 expected += " or '~', ','"
 
-            self.error(f"Expected {expected} , got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected {expected}")
 
 
     # <rela_expr>
-    # Production 122: rela_expr → <arith_expr> <rela_tail>
+    # Production 123: <rela_expr> → <arith_expr> <rela_tail>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1580,19 +1565,19 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             arith_expr_node = self.parse_arith_expr()
             rela_tail_node = self.parse_rela_tail()
             return ASTNode('rela_expr', children=[arith_expr_node, rela_tail_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <rela_tail>
-    # Production 123: rela_tail → <rela_sym> <arith_expr>
+    # Production 124: <rela_tail> → <rela_sym> <arith_expr>
     # PREDICT = {>, <, >=, <=, ==, !=}
 
-    # Production 124: rela_tail → λ
+    # Production 125: <rela_tail> → λ
     # PREDICT = { ~, ,, ), ||, && }
 
     def parse_rela_tail(self):
@@ -1603,7 +1588,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"Expected factors (int_lit, float_lit, id) after '{rela_sym_node.children[0].value}' operator, got '{next_tok}'")
+                self.error(f"Unexpected token: '{next_tok}' | Expected factors (int_lit, float_lit, char_lit, yuh, naur, string_lit, identifier) after '{rela_sym_node.children[0].value}' operator")
                 raise StopIteration
 
             self.rela_used = True
@@ -1613,10 +1598,10 @@ class Parser:
         elif current in ['&&', '||', '~', ',', ')']:
             return ASTNode('rela_tail_empty')
         else:
-            self.error(f"Expected relational symbols (> < >= <= == !=) or '&&' '||' '~' ',' ')', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected relational symbols (> < >= <= == !=) or '&&' '||' '~' ',' ')'")
 
     # <rela_sym>
-    # Production 125-130: rela_sym → > | < | >= | <= | == | !=
+    # Production 126-131: <rela_sym> → > | < | >= | <= | == | !=
     # PREDICT = {> | < | >= | <= | == | !=}
 
     def parse_rela_sym(self):
@@ -1641,10 +1626,10 @@ class Parser:
             self.match('!=')
             return ASTNode('rela_sym', ASTNode('operator', value='!='))
         else:
-            self.error(f"Expected relational symbols (> < >= <= == !=), got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected relational symbols (> < >= <= == !=)")
 
     # <arith_op1>
-    # Production 131-132: arith_op1 → + | -
+    # Production 132-133: <arith_op1> → + | -
     # PREDICT = {+ | -}
 
     def parse_arith_op1(self):
@@ -1657,10 +1642,10 @@ class Parser:
             self.match('-')
             return ASTNode('arith_op1', ASTNode('operator', value='-'))
         else:
-            self.error(f"Expected '+' or '-', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '+' or '-'")
 
     # <arith_op2>
-    # Production 133-135: arith_op2 → * | / | %
+    # Production 134-136: <arith_op2> → * | / | %
     # PREDICT = {* | / | %}
 
     def parse_arith_op2(self):
@@ -1676,10 +1661,10 @@ class Parser:
             self.match('%')
             return ASTNode('arith_op2', ASTNode('operator', value='%'))
         else:
-            self.error(f"Expected '*' or '/' or '%', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '*' or '/' or '%'")
 
     # <arith_expr>
-    # Production 136: arith_expr → <term> <arith_tail>
+    # Production 137: <arith_expr> → <term> <arith_tail>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1687,19 +1672,19 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             term_node = self.parse_term()
             arith_tail_node = self.parse_arith_tail()
             return ASTNode('arith_expr', children=[term_node, arith_tail_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <arith_tail>
-    # Production 137: arith_tail → <arith_op1> <term> <arith_tail>
+    # Production 138: <arith_tail> → <arith_op1> <term> <arith_tail>
     # PREDICT = {+, -}
 
-    # Production 138: arith_tail → λ
+    # Production 139: <arith_tail> → λ
     # PREDICT = { ~, ,, ], ), ||, &&, >, <, >=, <=, ==, != }
 
     def parse_arith_tail(self):
@@ -1710,7 +1695,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"Expected factors (int_lit, float_lit, id) after '{arith_op1_node.children[0].value}' operator, got '{next_tok}'")
+                self.error(f"Unexpected token: '{next_tok}' | Expected factors (int_lit, float_lit, id) after '{arith_op1_node.children[0].value}' operator")
                 raise StopIteration
 
             term_node = self.parse_term()
@@ -1724,19 +1709,19 @@ class Parser:
                 expected += ", >, <, >=, <=, ==, !="
 
             if self.paren_depth > 0:
-                self.error(f"Expected {expected}, or ) to close, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ) to close")
 
             elif self.in_array_size:
-                self.error(f"Expected {expected}, or ] to close, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ] to close")
 
             else:
-                self.error(f"Expected {expected}, or ~ to terminate statement, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ~ to terminate statement")
 
             raise StopIteration
 
 
     # <term>
-    # Production 139: term → <factor> <term_tail>
+    # Production 140: <term> → <factor> <term_tail>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1744,21 +1729,21 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             factor_node = self.parse_factor()
             term_tail_node = self.parse_term_tail()
             return ASTNode('term', children=[factor_node, term_tail_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
             raise StopIteration
 
 
 
     # <term_tail>
-    # Production 140: term_tail → <arith_op2> <factor> <term_tail>
+    # Production 141: <term_tail> → <arith_op2> <factor> <term_tail>
     # PREDICT = {*, /, %}
 
-    # Production 141: term_tail → λ
+    # Production 142: <term_tail> → λ
     # PREDICT = { ~, ], ,, ), ||, &&, >, <, >=, <=, ==, !=, +, -}
 
     def parse_term_tail(self):
@@ -1769,7 +1754,7 @@ class Parser:
 
             next_tok = self.peek()
             if next_tok not in self.FIRST_PRIMARY and not (next_tok and next_tok.startswith('id')):
-                self.error(f"Expected factors (int_lit, float_lit, id) after '{arith_op2_node.children[0].value}' operator, got '{next_tok}'")
+                self.error(f"Unexpected token: '{next_tok}' | Expected factors (int_lit, float_lit, id) after '{arith_op2_node.children[0].value}' operator")
                 raise StopIteration
 
             factor_node = self.parse_factor()
@@ -1782,19 +1767,19 @@ class Parser:
             if not self.rela_used:
                 expected += ", >, <, >=, <=, ==, !="
             if self.paren_depth > 0:
-                self.error(f"Expected {expected}, or ) to close, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ) to close")
 
             elif self.in_array_size:
-                self.error(f"Expected {expected}, or ] to close, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ] to close")
 
             else:
-                self.error(f"Expected {expected}, or ~ to terminate statement, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ~ to terminate statement")
 
             raise StopIteration
         
 
     # <factor>
-    # Production 142: factor → <primary>
+    # Production 143: <factor> → <primary>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1802,22 +1787,25 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             primary_node = self.parse_primary()
             return ASTNode('factor', children=[primary_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
             raise StopIteration
 
 
     # <primary>
-    # Production 143: primary → ( <expr> )
+    # Production 144: <primary> → ( <expr> )
     # PREDICT = {(}
 
-    # Production 144: primary → <output>
+    # Production 145: <primary> → -<negate>
+    # PREDICT = {-}
+
+    # Production 146: <primary> → <output>
     # PREDICT = { ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit }
 
-    # Production 145: primary → !( <logic_expr> )
+    # Production 147: <primary> → !( <logic_expr> )
     # PREDICT = {!}
 
     def parse_primary(self):
@@ -1830,6 +1818,10 @@ class Parser:
             self.paren_depth -= 1
             self.match(')')
             return ASTNode('primary', children=[expr_node])
+        elif current == '-':
+            self.match('-')
+            negate_node = self.parse_negate()
+            return ASTNode('primary', children=[negate_node])
         elif current in ['++', '--','toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
                         'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit'] or (current and current.startswith('id')): 
             output_node = self.parse_output()
@@ -1844,22 +1836,46 @@ class Parser:
             return ASTNode('primary', children=[logic_expr_node])
         else:
             if current in ['+', '-', '*', '/', '%', '=', '+=', '-=', '*=', '/=', '%=', '>', '<', '>=', '<=', '==', '!=']:
-                self.error(f"Unexpected operator '{current}' - expected value or identifier")
+                self.error(f"Unexpected operator '{current}' - expected value (int_lit, float_lit, char_lit) or identifier")
             elif current in ['~', '}', ',', ')']:
-                self.error(f"Incomplete expression - unexpected '{current}'")
+                self.error(f"Unexpected token: '{current}' | Incomplete expression ")
             else:
-                self.error(f"Expected value, identifier, or '(' in expression, got '{current}'")
+                self.error(f"Unexpected token: '{current}' | Expected value (int_lit, float_lit, char_lit), identifier, or '(' in expression")
             raise StopIteration
 
+    # <negate>
+    # Production 148: <negate> → (<expr>)
+    # PREDICT = {(}
+
+    # Production 149: <negate> → id<id_access>
+    # PREDICT = {id}
+
+    def parse_negate(self):
+        current = self.peek()
+
+        if current == '(':
+            self.match('(')
+            self.paren_depth += 1
+            expr_node = self.parse_expr()
+            self.paren_depth -= 1
+            self.match(')')
+            return ASTNode('negate', children=[expr_node])
+        elif current and current.startswith("id"):
+            id_no = self.check_id()
+            id_access_node = self.parse_id_access(149)
+            return ASTNode('negate', children=[id_no, id_access_node])
+        else:
+            self.error(f"Unexpected token: '{current}' | Expected identifier, or '(' in expression")
+            
 
     # <stmt_ctrl>
-    # Production 146: stmt_ctrl → <statement> <stmt_ctrl>
+    # Production 150: <stmt_ctrl> → <statement> <stmt_ctrl>
     # PREDICT = {int, float, char, string, bool, gust, wind, inhale, exhale, ++, --, id, if, stream, cycle, echo, do}
 
-    # Production 147: stmt_ctrl → <ctrl_flow>
+    # Production 151: <stmt_ctrl> → <ctrl_flow>
     # PREDICT = {resist, flow, gasp}
 
-    # Production 148: stmt_ctrl → λ
+    # Production 152: <stmt_ctrl> → λ
     # PREDICT = {}}
 
     def parse_stmt_ctrl(self):
@@ -1875,11 +1891,11 @@ class Parser:
         elif current == '}':
             return ASTNode('stmt_ctrl_empty')
         else:
-            self.error(f"Expected statement(s), got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected statement(s) ('int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--', 'if', 'stream', 'cycle', 'echo', 'do', 'resist', 'flow') or 'gasp'")
 
 
     # <ctrl_flow>
-    # Production 149–150: ctrl_flow → resist~ | flow~
+    # Production 154–155: <ctrl_flow> → resist~ | flow~
     # PREDICT = {resist | flow}
 
     def parse_ctrl_flow(self):
@@ -1897,10 +1913,10 @@ class Parser:
             return_stat_node = self.parse_return_stat()
             return ASTNode('return_stat_node', children=[return_stat_node])
         else:
-            self.error(f"Expected 'resist' or 'flow', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'resist' or 'flow''")
 
     # <conditioner>
-    # Production 151–152: conditioner → <if_stat> | <switch_stat>
+    # Production 156–157: <conditioner> → <if_stat> | <switch_stat>
     # PREDICT = {if | stream}
 
     def parse_conditioner(self):
@@ -1913,10 +1929,10 @@ class Parser:
             switch_stat_node = self.parse_switch_stat()
             return ASTNode('conditioner', children=[switch_stat_node])
         else:
-            self.error(f"Expected 'if' or 'stream', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'if' or 'stream'")
 
     # <if_stat>
-    # Production 153: if_stat → if (<cond_stat>) {<stmt_ctrl>} <if_tail>
+    # Production 158: <if_stat> → if (<cond_stat>) {<stmt_ctrl>} <if_tail>
     # PREDICT = {if}
 
     def parse_if_stat(self):
@@ -1935,17 +1951,17 @@ class Parser:
             if_tail_node = self.parse_if_tail()
             return ASTNode('if_stat', children=[cond_stat_node, stmt_ctrl_node, if_tail_node])
         else:
-            self.error(f"Expected 'if', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'if'")
 
 
     # <if_tail>
-    # Production 154: if_tail → elseif (<cond_stat>) {<stmt_ctrl>} <if_tail>
+    # Production 159: <if_tail> → elseif (<cond_stat>) {<stmt_ctrl>} <if_tail>
     # PREDICT = {elseif}
 
-    # Production 155: if_tail → else {<stmt_ctrl>}
+    # Production 160: <if_tail> → else {<stmt_ctrl>}
     # PREDICT = {else}
 
-    # Production 156: if_tail → λ
+    # Production 161: <if_tail> → λ
     # PREDICT = { }, int, float, char, string, bool, gust, wind, inhale, exhale, ++, --, id, resist, flow, if, stream, cycle, echo, do, gasp }
 
     def parse_if_tail(self):
@@ -1973,10 +1989,11 @@ class Parser:
                          'resist', 'flow', 'if', 'stream', 'cycle', 'echo', 'do', 'gasp'] or (current and current.startswith('id')):
             return ASTNode('if_tail_empty')
         else:
-            self.error(f"Expected 'elseif' or 'else' or other statements, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'elseif' or 'else' or '}}' or statements ('int', 'float', 'char', 'string', 'bool', 'gust', 'wind', 'inhale', 'exhale', '++', '--'," 
+                         "'resist', 'flow', 'if', 'stream', 'cycle', 'echo', 'do', 'gasp'")
 
     # <cond_stat>
-    # Production 157: cond_stat → <expr>
+    # Production 162: <cond_stat> → <expr>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1984,15 +2001,15 @@ class Parser:
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             expr_node = self.parse_expr()
             return ASTNode('cond_stat', children=[expr_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <switch_stat>
-    # Production 158: switch_stat → stream (id <id_access>) { <switch_cases> <switch_def> }
+    # Production 163: <switch_stat> → stream (id <id_access>) { <switch_cases> <switch_def> }
     # PREDICT = {stream}
 
     def parse_switch_stat(self):
@@ -2010,14 +2027,14 @@ class Parser:
             self.match('}')
             return ASTNode('switch_stat', children=[id_no, id_access_node, switch_cases_node, switch_def_node])
         else:
-            self.error(f"Expected 'stream', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'stream'")
 
 
     # <switch_cases>
-    # Production 159: switch_cases → case <switch_opts> : <stmt_list> resist~ <switch_cases>
+    # Production 164: <switch_cases> → case <switch_opts> : <stmt_list> resist~ <switch_cases>
     # PREDICT = {case}
 
-    # Production 160: switch_cases → λ
+    # Production 165: <switch_cases> → λ
     # PREDICT = { }, diffuse }
 
     def parse_switch_cases(self):
@@ -2035,11 +2052,10 @@ class Parser:
         elif current in [ '}', 'diffuse']:
             return ASTNode('switch_cases_empty')
         else:
-            self.error("Expected 'case' or 'diffuse' or '}', " 
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'case' or 'diffuse' or '}}'")
 
     # <switch_opts>
-    # Production 161-162: switch_opts → int_lit | char_lit
+    # Production 166-167: <switch_opts> → int_lit | char_lit
     # PREDICT = {int_lit | char_lit}
 
     def parse_switch_opts(self):
@@ -2052,14 +2068,14 @@ class Parser:
             litvalue = self.match('char_lit')
             return ASTNode('switch_opts', value=litvalue.value)
         else:
-            self.error(f"Expected integer type literal, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected int_lit or char_lit")
 
 
     # <switch_def>
-    # Production 163: switch_def → diffuse: <stmt_list> resist~
+    # Production 168: <switch_def> → diffuse: <stmt_list> resist~
     # PREDICT = {diffuse}
 
-    # Production 164: switch_def → λ
+    # Production 169: <switch_def> → λ
     # PREDICT = {}}
 
     def parse_switch_def(self):
@@ -2075,12 +2091,11 @@ class Parser:
         elif current == '}':
             return ASTNode('switch_def_empty')
         else:
-            self.error("Expected 'diffuse' or '}', " 
-                        f"got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'diffuse' or '}}' ")
 
 
     # <iteration>
-    # Production 165–167: iteration → <while_loop> | <for_loop> | <dowhile_loop>
+    # Production 170–172: <iteration> → <while_loop> | <for_loop> | <dowhile_loop>
     # PREDICT = {cycle | echo | do}
 
     def parse_iteration(self):
@@ -2096,11 +2111,11 @@ class Parser:
             dowhile_loop_node = self.parse_dowhile_loop()
             return ASTNode('iteration', children=[dowhile_loop_node])
         else:
-            self.error(f"Expected 'cycle' or 'echo' or 'do', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'cycle' or 'echo' or 'do'")
 
 
     # <while_loop>
-    # Production 168: while_loop → cycle (<cond_stat>) { <stmt_ctrl> }
+    # Production 173: <while_loop> → cycle (<cond_stat>) { <stmt_ctrl> }
     # PREDICT = {cycle}
 
     def parse_while_loop(self):
@@ -2121,11 +2136,11 @@ class Parser:
             self.match('}')
             return ASTNode('while_loop', children=[cond_stat_node, stmt_ctrl_node])
         else:
-            self.error(f"Expected 'cycle', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'cycle'")
 
 
     # <for_loop>
-    # Production 169: for_loop → echo (<for_init> <cond_stat>~ <identifier_stat>) { <stmt_ctrl> } 
+    # Production 174: <for_loop> → echo (<for_init>~ <cond_stat>~ <identifier_stat>) { <stmt_ctrl> } 
     # PREDICT = {echo}
 
     def parse_for_loop(self):
@@ -2135,6 +2150,7 @@ class Parser:
             self.match('echo')
             self.match('(')
             for_init_node = self.parse_for_init()
+            self.match('~')
             self.in_cond_stat = True
             cond_stat_node = self.parse_cond_stat()
             self.in_cond_stat = False
@@ -2146,10 +2162,72 @@ class Parser:
             self.match('}')
             return ASTNode('while_loop', children=[for_init_node, cond_stat_node, identifier_stat_node, stmt_ctrl_node])
         else:
-            self.error(f"Expected 'echo', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'echo'")
+
+    # <for_init>
+    # Production 175: <for_init> → id<id_access> = <for_vals>
+    # PREDICT = {id}
+
+    # Production 176: <for_init> → int id = <for_vals>
+    # PREDICT = {int}
+
+    # Production 177: <for_init> → float id = <for_vals>
+    # PREDICT = {float}
+
+    # Production 178: <for_init> → char id = <for_vals>
+    # PREDICT = {char}
+
+    def parse_for_init(self):
+        current = self.peek()
+
+        if current and current.startswith('id'):
+            id_no = self.check_id()
+            id_access_node = self.parse_id_access(177)
+            self.match('=')
+            for_vals_node = self.parse_for_vals()
+            return ASTNode('for_init', children=[id_no, id_access_node, for_vals_node])
+        elif current == 'int':
+            data_type_node = self.parse_data_type()
+            id_no = self.check_id()
+            self.match('=')
+            for_vals_node = self.parse_for_vals()
+            return ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
+        elif current == 'float':
+            data_type_node = self.parse_data_type()
+            id_no = self.check_id()
+            self.match('=')
+            for_vals_node = self.parse_for_vals()
+            return ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
+        elif current == 'char':
+            data_type_node = self.parse_data_type()
+            id_no = self.check_id()
+            self.match('=')
+            for_vals_node = self.parse_for_vals()
+            return ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
+        else:
+            self.error(f"Unexpected token: '{current}' | Expected 'do'")        
+
+    # <for_vals>
+    # Production 179-181: <for_vals> → int_lit | float_lit | char_lit
+    # PREDICT = {int_lit | float_lit | char_lit}
+
+    def parse_for_vals(self):
+        current = self.peek()
+
+        if current == 'int_lit':
+            litvalue = self.match('int_lit')
+            return ASTNode('for_vals', value=litvalue.value)
+        elif current == 'float_lit':
+            litvalue = self.match('float_lit')
+            return ASTNode('for_vals', value=litvalue.value)
+        elif current == 'char_lit':
+            litvalue = self.match('char_lit')
+            return ASTNode('for_vals', value=litvalue.value)
+        else:
+            self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, or char_lit")        
 
     # <dowhile_loop>
-    # Production 170: dowhile_loop → do {<stmt_ctrl>} cycle (<cond_stat>)~
+    # Production 182: <dowhile_loop> → do {<stmt_ctrl>} cycle (<cond_stat>)~
     # PREDICT = {do}
 
     def parse_dowhile_loop(self):
@@ -2171,30 +2249,12 @@ class Parser:
             self.match('~')
             return ASTNode('while_loop', children=[stmt_ctrl_node, cond_stat_node])
         else:
-            self.error(f"Expected 'do', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'do'")
 
-    # <for_init>
-    # Production 171: for_init → <normal>
-    # PREDICT = { int, float, char, string, bool }
-
-    # Production 172: for_init → <identifier_stat>
-    # PREDICT = { ++, --, id }
-
-    def parse_for_init(self):
-        current = self.peek()
-
-        if current in ['int', 'float', 'char', 'string', 'bool']:
-            normal_node = self.parse_normal()
-            return ASTNode('for_init', children=[normal_node])
-        elif current in ['++', '--'] or (current and current.startswith('id')):
-            identifier_stat_node = self.parse_identifier_stat()
-            return ASTNode('for_init', children=[identifier_stat_node])
-        else:
-            self.error(f"Expected 'do', got '{current}'")
 
 
     # <function_call>
-    # Production 173–182: function_call → toRise(<param_item>)
+    # Production 183–192: <function_call> → toRise(<param_item>)
     #                                     toFall(<param_item>)
     #                                     horizon(<param_item>)
     #                                     sizeOf(<param_item>)
@@ -2272,64 +2332,64 @@ class Parser:
             self.match(')')
             return ASTNode('function_call', children=[param_item1_node, param_item2_node])
         else:
-            self.error(f"Expected function call (toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft), got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected function call (toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft)'{current}'")
 
 
     # <param_opts>
-    # Production 183: param_opts → <param_list>
+    # Production 193: param_opts → <param_list>
     # PREDICT = { (, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
-    # Production 184: param_opts → λ
+    # Production 194: param_opts → λ
     # PREDICT = { ) }
 
     def parse_param_opts(self):
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             param_list_node = self.parse_param_list()
             return ASTNode('param_opts', children=[param_list_node])
         elif current == ')':
             return ASTNode('param_opts_empty')
         else:
-            self.error(f"Expected '(', ')', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
     # <param_list>
-    # Production 185: param_list → <param_item> <param_tail>
+    # Production 195: param_list → <param_item> <param_tail>
     # PREDICT = { (, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
     def parse_param_list(self):
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             param_item_node = self.parse_param_item()
             param_tail_node = self.parse_param_tail()
             return ASTNode('param_list', children=[param_item_node, param_tail_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <param_item>
-    # Production 186: param_item → <expr>
+    # Production 196: param_item → <expr>
     # PREDICT = { (, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
     def parse_param_item(self):
         current = self.peek()
 
         if current in ['(', '++', '--', 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft',
-                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!'] or (current and current.startswith('id')):
+                        'int_lit', 'float_lit', 'yuh', 'naur','char_lit', 'string_lit', '!', '-'] or (current and current.startswith('id')):
             expr_node = self.parse_expr()
             return ASTNode('param_item', children=[expr_node])
         else:
-            self.error(f"Expected '(', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
 
     # <param_tail>
-    # Production 187: param_tail → , <param_list>
+    # Production 197: param_tail → , <param_list>
     # PREDICT = {,}
 
-    # Production 188: param_tail → λ
+    # Production 198: param_tail → λ
     # PREDICT = {)}
 
     def parse_param_tail(self):
@@ -2342,14 +2402,14 @@ class Parser:
         elif current == ')':
             return ASTNode('param_tail_empty')
         else:
-            self.error(f"Expected ',' or ')', got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected ',' or ')'")
 
 
     # <return_stat>
-    # Production 189: return_stat → gasp <expr>~
+    # Production 199: return_stat → gasp <expr>~
     # PREDICT = {gasp}
 
-    # Production 190: return_stat → λ
+    # Production 200: return_stat → λ
     # PREDICT = {}}
 
     def parse_return_stat(self):
@@ -2363,7 +2423,7 @@ class Parser:
         elif current == '}':
             return ASTNode('return_stat_empty')
         else:
-            self.error(f"Expected 'gasp' or end of program, got '{current}'")
+            self.error(f"Unexpected token: '{current}' | Expected 'gasp' or end of program '}}'")
 
 
     # def parse_data_type(self):

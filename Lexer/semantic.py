@@ -698,18 +698,40 @@ class SemanticAnalyzer:
                 )
     
     def _collect_struct_init_values(self, node, values):
+        """Collect initializer values for gust Student Var = { ... }. Init lives in struct_tail2's 1d_element (output + element_tail)."""
         if not hasattr(node, 'children') or not node.children:
             return
+        if node.type == 'struct_tail' and len(node.children) >= 2:
+            struct_tail2 = node.children[1]
+            st2_type = getattr(struct_tail2, 'type', None)
+            if st2_type == 'struct_tail2_empty':
+                return
+            if st2_type == 'struct_tail2' and struct_tail2.children and len(struct_tail2.children) >= 2:
+                oned_elem = struct_tail2.children[1]
+                if getattr(oned_elem, 'type', None) == '1d_element':
+                    self._collect_1d_element_values(oned_elem, values)
+                    return
         for child in node.children:
             if hasattr(child, 'type'):
-                if child.type in ('value', 'output_content'):
+                if child.type in ('value', 'output_content', 'expr', 'identifier', 'function_call'):
                     values.append(child)
-                elif child.type == 'expr':
-                    values.append(child)
-                elif child.type == 'identifier':
-                    pass
                 else:
                     self._collect_struct_init_values(child, values)
+
+    def _collect_1d_element_values(self, node, values):
+        """Collect expression nodes from 1d_element (output + element_tail), same shape as const_1d."""
+        if not hasattr(node, 'children') or not node.children:
+            return
+        if node.type == '1d_element':
+            if node.children[0].type == 'output' and node.children[0].children:
+                values.append(node.children[0].children[0])
+            if len(node.children) > 1:
+                self._collect_1d_element_values(node.children[1], values)
+        elif node.type == 'element_tail' and node.children:
+            if node.children[0].type == 'output' and node.children[0].children:
+                values.append(node.children[0].children[0])
+            if len(node.children) > 1:
+                self._collect_1d_element_values(node.children[1], values)
 
     def _collect_const_1d_values(self, node, values):
         """Collect initializer expression nodes from const_1d (output + element_tail) for wind gust."""
@@ -931,6 +953,7 @@ class SemanticAnalyzer:
         
         has_unary = False
         identifier = None
+        is_function_call = False
         
         for child in node.children:
             if child.type == 'unary_op':
@@ -938,28 +961,31 @@ class SemanticAnalyzer:
             elif child.type == 'identifier':
                 identifier = child.value
             elif child.type == 'id_stat_body':
+                if child.children and any(getattr(c, 'type', None) == 'param_opts' for c in child.children):
+                    is_function_call = True
                 self._visit_id_stat_body(child, identifier)
             elif child.type == 'id_access':
                 self.visit(child)
         
         if identifier:
-            symbol = self.lookup(identifier)
-            actual_name = self.get_actual_name(identifier)
-            if not symbol:
-                line, col = self.get_location(identifier)
-                self.error(f"Undeclared identifier '{actual_name}'", line, col)
-            elif has_unary:
-                # Spec: unary ++/-- only for int and char
-                if symbol['data_type'] not in self.UNARY_TYPES:
+            if not is_function_call:
+                symbol = self.lookup(identifier)
+                actual_name = self.get_actual_name(identifier)
+                if not symbol:
                     line, col = self.get_location(identifier)
-                    self.error(
-                        f"Cannot apply increment/decrement to '{actual_name}' "
-                        f"of type '{symbol['data_type']}' (only 'int' and 'char' allowed)",
-                        line, col,
-                    )
-                if symbol['is_constant']:
-                    line, col = self.get_location(identifier)
-                    self.error(f"Cannot modify constant '{actual_name}'", line, col)
+                    self.error(f"Undeclared identifier '{actual_name}'", line, col)
+                elif has_unary:
+                    # Spec: unary ++/-- only for int and char
+                    if symbol['data_type'] not in self.UNARY_TYPES:
+                        line, col = self.get_location(identifier)
+                        self.error(
+                            f"Cannot apply increment/decrement to '{actual_name}' "
+                            f"of type '{symbol['data_type']}' (only 'int' and 'char' allowed)",
+                            line, col,
+                        )
+                    if symbol['is_constant']:
+                        line, col = self.get_location(identifier)
+                        self.error(f"Cannot modify constant '{actual_name}'", line, col)
     
     def _visit_id_stat_body(self, node, identifier):
         if not node.children:
@@ -1339,18 +1365,43 @@ class SemanticAnalyzer:
     def visit_while_loop(self, node):
         old_in_loop = self.in_loop
         self.in_loop = True
-        
-        for child in node.children:
-            if child.type == 'cond_stat':
-                self._get_expression_type(child)
-            elif child.type == 'stmt_ctrl':
-                self.visit(child)
-            elif hasattr(child, 'type'):
-                self.visit(child)
-        
-        self.in_loop = old_in_loop
-    
+        self.enter_scope('echo')
+        try:
+            for child in node.children:
+                if child.type == 'for_init':
+                    self._visit_for_init_declare(child)
+                elif child.type == 'cond_stat':
+                    self._get_expression_type(child)
+                elif child.type == 'stmt_ctrl':
+                    self.visit(child)
+                elif hasattr(child, 'type'):
+                    self.visit(child)
+        finally:
+            self.exit_scope()
+            self.in_loop = old_in_loop
+
+    def _visit_for_init_declare(self, node):
+        """Declare loop variable from for_init (int/float/char id = val) so condition and body see it."""
+        if not node.children:
+            return
+        first = node.children[0]
+        if getattr(first, 'type', None) == 'data_type' and len(node.children) >= 3:
+            data_type = first.value
+            id_node = node.children[1]
+            for_vals_node = node.children[2]
+            var_name = getattr(id_node, 'value', None)
+            if var_name:
+                if not self.declare_symbol(var_name, 'variable', data_type):
+                    line, col = self.get_location(var_name)
+                    actual = self.get_actual_name(var_name)
+                    self.error(f"Loop variable '{actual}' is already declared in this scope", line, col)
+                if for_vals_node and getattr(for_vals_node, 'type', None) == 'for_vals':
+                    self.visit(for_vals_node)
+            return
+        self.visit_for_init(node)
+
     def visit_for_init(self, node):
+        """Visit for_init children (id = for_vals or data_type id for_vals); declare handled in _visit_for_init_declare."""
         for child in node.children:
             if hasattr(child, 'type'):
                 self.visit(child)
