@@ -2205,7 +2205,8 @@ class Parser:
             for_vals_node = self.parse_for_vals()
             return ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
         else:
-            self.error(f"Unexpected token: '{current}' | Expected 'do'")        
+            self.error(f"Unexpected token: '{current}' | Expected identifier, 'int', 'float', or 'char'") 
+            
 
     # <for_vals>
     # Production 179-181: <for_vals> → int_lit | float_lit | char_lit
@@ -2437,4 +2438,5 @@ class Parser:
     #         raise SyntaxError(
     #             f"Expected data type (int, float, char, string, bool), "
     #             f"got '{current}' at line {self.current_token.line}"
+
     #         )
