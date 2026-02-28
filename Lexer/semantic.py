@@ -427,7 +427,7 @@ class SemanticAnalyzer:
                                 if declared_size is not None and init_count > declared_size:
                                     line, col = self.get_location(identifier)
                                     self.error(
-                                        "Semantic Error: The number of elements in the initialization list exceeds the declared array size.",
+                                        " The number of elements in the initialization list exceeds the declared array size.",
                                         line, col,
                                     )
                     elif first_child.type == 'operator' and first_child.value == '=':
@@ -479,7 +479,7 @@ class SemanticAnalyzer:
                                     if declared_size is not None and init_count > declared_size:
                                         line, col = self.get_location(identifier)
                                         self.error(
-                                            "Semantic Error: The number of elements in the initialization list exceeds the declared array size.",
+                                            " The number of elements in the initialization list exceeds the declared array size.",
                                             line, col,
                                         )
                         elif first_child.type == 'operator' and first_child.value == '=':
@@ -1146,17 +1146,23 @@ class SemanticAnalyzer:
         if not struct_def:
             return None
         
-        if member_id not in struct_def:
+        # struct_def keys are token types; match member by actual name (same as string interpolation)
+        member_actual = self.get_actual_name(member_id)
+        member_found_key = None
+        for k in struct_def:
+            if self.get_actual_name(k) == member_actual:
+                member_found_key = k
+                break
+        if member_found_key is None:
             line, col = self.get_location(member_id)
             actual_struct = self.get_actual_name(struct_id)
-            actual_member = self.get_actual_name(member_id)
             self.error(
-                f"'{actual_member}' is not a member of structure '{actual_struct}'",
+                f"'{member_actual}' is not a member of structure '{actual_struct}'",
                 line, col,
             )
             return None
         
-        return struct_def[member_id]
+        return struct_def[member_found_key]
     
     def _visit_id_stat_tail(self, node, identifier):
         symbol = self.lookup(identifier) if identifier else None
@@ -1323,17 +1329,26 @@ class SemanticAnalyzer:
         io_type = node.children[0] if isinstance(node.children[0], str) else None
         
         if io_type == 'inhale':
-            for child in node.children[1:]:
-                if hasattr(child, 'type') and child.type == 'identifier':
-                    identifier = child.value
-                    actual_name = self.get_actual_name(identifier)
-                    symbol = self.lookup(identifier)
-                    if not symbol:
-                        line, col = self.get_location(identifier)
-                        self.error(f"Undeclared identifier '{actual_name}' in inhale statement", line, col)
-                    elif symbol['is_constant']:
-                        line, col = self.get_location(identifier)
-                        self.error(f"Cannot read into constant '{actual_name}'", line, col)
+            # AST: ['inhale', id_no, id_access_node]; id_access_node is . member
+            if len(node.children) >= 2 and hasattr(node.children[1], 'type') and node.children[1].type == 'identifier':
+                identifier = node.children[1].value
+                actual_name = self.get_actual_name(identifier)
+                symbol = self.lookup(identifier)
+                if not symbol:
+                    line, col = self.get_location(identifier)
+                    self.error(f"Undeclared identifier '{actual_name}' in inhale statement", line, col)
+                elif symbol.get('is_constant'):
+                    line, col = self.get_location(identifier)
+                    self.error(f"Cannot read into constant '{actual_name}'", line, col)
+                else:
+                    # Two-tier check: validate that the accessed member exists on the structure
+                    if len(node.children) >= 3:
+                        id_access_node = node.children[2]
+                        if getattr(id_access_node, 'type', None) == 'id_access' and getattr(id_access_node, 'children', None) and len(id_access_node.children) >= 2 and id_access_node.children[0] == '.':
+                            member_node = id_access_node.children[1]
+                            member_id = getattr(member_node, 'value', None)
+                            if member_id is not None:
+                                self._validate_struct_member_access(identifier, member_id)
         
         elif io_type == 'exhale':
             for child in node.children[1:]:
@@ -1668,7 +1683,7 @@ class SemanticAnalyzer:
             if (line, col) == (0, 0):
                 line, col = self.get_node_location(rela_tail_node)
             self.error(
-                "Semantic Error: String types cannot be used with magnitude relational operators. "
+                " String types cannot be used with magnitude relational operators. "
                 "Only == and != are permitted for strings.",
                 line, col,
             )
@@ -2081,7 +2096,7 @@ class SemanticAnalyzer:
                         if line == 0 and col == 0 and identifier:
                             line, col = self.get_location(identifier)
                         self.error(
-                            "Semantic Error: Invalid array size. Array size must be a positive integer strictly greater than zero.",
+                            " Invalid array size. Array size must be a positive integer strictly greater than zero.",
                             line, col,
                         )
             elif child.type == 'col_size' and child.children:
