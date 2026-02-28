@@ -251,32 +251,85 @@ class SemanticAnalyzer:
         return (0, 0)
 
     def _validate_string_interpolation(self, string_value, node_for_location=None):
-        """Case 2: Validate that every @{identifier} in a string is declared in scope."""
+        """Validate every @{identifier} or @{parent.member} in a string (parent-then-member for structures)."""
         if not string_value or not isinstance(string_value, str) or '@{' not in string_value:
             return
+
+        def get_line_col():
+            line, col = (0, 0)
+            if node_for_location is not None:
+                line, col = self._find_value_location(node_for_location)
+            if line == 0 and col == 0:
+                line, col = self.get_literal_location(string_value)
+            return line, col
+
         for id_str in re.findall(r'@\{([^}]+)\}', string_value):
             id_str = id_str.strip()
             if not id_str:
                 continue
-            # Resolve: symbol table may use token (id1); identifier_map gives token->value
-            found = False
-            for scope in reversed(self.scopes):
-                for key in scope:
-                    if self.get_actual_name(key) == id_str:
-                        found = True
+
+            if '.' in id_str:
+                # Parent-then-member: resolve parent, then check member exists on that structure
+                parts = id_str.split('.', 1)
+                parent_name = parts[0].strip()
+                member_name = parts[1].strip() if len(parts) > 1 else None
+                if not parent_name or not member_name:
+                    line, col = get_line_col()
+                    self.error(
+                        f"Invalid string interpolation '{id_str}'; expected identifier or parent.member",
+                        line, col,
+                    )
+                    continue
+                parent_symbol = None
+                for scope in reversed(self.scopes):
+                    for key in scope:
+                        if self.get_actual_name(key) == parent_name:
+                            parent_symbol = scope[key]
+                            break
+                    if parent_symbol is not None:
                         break
-                if found:
-                    break
-            if not found:
-                line, col = (0, 0)
-                if node_for_location is not None:
-                    line, col = self._find_value_location(node_for_location)
-                if line == 0 and col == 0:
-                    line, col = self.get_literal_location(string_value)
-                self.error(
-                    f"Undeclared identifier '{id_str}' in string interpolation",
-                    line, col,
-                )
+                if parent_symbol is None:
+                    line, col = get_line_col()
+                    self.error(
+                        f"Undeclared identifier '{parent_name}' in string interpolation",
+                        line, col,
+                    )
+                    continue
+                struct_type = parent_symbol.get('struct_type')
+                if not struct_type:
+                    line, col = get_line_col()
+                    self.error(
+                        f"'{parent_name}' is not a structure; cannot access member in string interpolation",
+                        line, col,
+                    )
+                    continue
+                struct_def = self.get_structure(struct_type)
+                if not struct_def:
+                    continue
+                # struct_def keys are token types (id3, id4); member_name is source text ("name")
+                member_found = any(self.get_actual_name(k) == member_name for k in struct_def)
+                if not member_found:
+                    line, col = get_line_col()
+                    self.error(
+                        f"'{member_name}' is not a member of structure '{parent_name}'",
+                        line, col,
+                    )
+            else:
+                # Single identifier: resolve by full name
+                found = False
+                for scope in reversed(self.scopes):
+                    for key in scope:
+                        if self.get_actual_name(key) == id_str:
+                            found = True
+                            break
+                    if found:
+                        break
+                if not found:
+                    line, col = get_line_col()
+                    self.error(
+                        f"Undeclared identifier '{id_str}' in string interpolation",
+                        line, col,
+                    )
 
     # ====================== Main Entry ======================
 
@@ -366,10 +419,17 @@ class SemanticAnalyzer:
                         is_array = True
                         dimensions = self._get_array_dimensions(first_child)
                         self._validate_array_size(first_child, identifier)
+                        declared_size = self._get_array_declared_size(first_child)
                         if len(norm_dec.children) > 1:
                             array_node = norm_dec.children[1]
                             if array_node.type == 'array' and array_node.children:
-                                self._validate_array_elements(array_node, data_type, identifier)
+                                init_count = self._validate_array_elements(array_node, data_type, identifier)
+                                if declared_size is not None and init_count > declared_size:
+                                    line, col = self.get_location(identifier)
+                                    self.error(
+                                        "Semantic Error: The number of elements in the initialization list exceeds the declared array size.",
+                                        line, col,
+                                    )
                     elif first_child.type == 'operator' and first_child.value == '=':
                         if len(norm_dec.children) > 1:
                             init_expr = norm_dec.children[1]
@@ -411,10 +471,17 @@ class SemanticAnalyzer:
                             is_array = True
                             dimensions = self._get_array_dimensions(first_child)
                             self._validate_array_size(first_child, identifier)
+                            declared_size = self._get_array_declared_size(first_child)
                             if len(norm_dec.children) > 1:
                                 array_node = norm_dec.children[1]
                                 if array_node.type == 'array' and array_node.children:
-                                    self._validate_array_elements(array_node, data_type, identifier)
+                                    init_count = self._validate_array_elements(array_node, data_type, identifier)
+                                    if declared_size is not None and init_count > declared_size:
+                                        line, col = self.get_location(identifier)
+                                        self.error(
+                                            "Semantic Error: The number of elements in the initialization list exceeds the declared array size.",
+                                            line, col,
+                                        )
                         elif first_child.type == 'operator' and first_child.value == '=':
                             if len(norm_dec.children) > 1:
                                 init_expr = norm_dec.children[1]
@@ -810,8 +877,15 @@ class SemanticAnalyzer:
             self.enter_scope(func_name)
             
             for param_name, param_type, is_array, dimensions in params:
-                self.declare_symbol(param_name, 'variable', param_type,
-                                    is_array=is_array, array_dimensions=dimensions)
+                if not self.declare_symbol(param_name, 'variable', param_type,
+                                           is_array=is_array, array_dimensions=dimensions):
+                    line, col = self.get_location(param_name)
+                    actual_param = self.get_actual_name(param_name)
+                    actual_func = self.get_actual_name(func_name)
+                    self.error(
+                        f"Duplicate parameter name '{actual_param}' in function '{actual_func}'",
+                        line, col,
+                    )
             
             for child in node.children:
                 if child.type == 'body':
@@ -904,7 +978,7 @@ class SemanticAnalyzer:
                         line, col,
                     )
                 elif return_type and self.current_function_return_type:
-                    if not self._types_compatible(self.current_function_return_type, return_type):
+                    if return_type != self.current_function_return_type:
                         self.error(
                             f"Return type mismatch in function '{func_name}': "
                             f"expected '{self.current_function_return_type}', got '{return_type}'",
@@ -1333,13 +1407,40 @@ class SemanticAnalyzer:
         
         self.in_switch = old_in_switch
     
+    def _get_case_literal_type(self, switch_opts_node):
+        """Infer int or char from switch_opts value (from parser: int_lit -> int, char_lit -> str)."""
+        value = getattr(switch_opts_node, 'value', None)
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return 'int'
+        if isinstance(value, str):
+            if value.isdigit():
+                return 'int'
+            if len(value) >= 2 and value.startswith("'") and value.endswith("'"):
+                return 'char'
+            if len(value) == 1:
+                return 'char'
+        return None
+
     def _check_switch_cases(self, node, switch_type, switch_var=None):
         if node.type == 'switch_cases_empty':
             return
         
         for child in node.children:
             if child.type == 'switch_opts':
-                pass
+                if switch_type is not None:
+                    case_type = self._get_case_literal_type(child)
+                    if case_type is not None and case_type != switch_type:
+                        line, col = self.get_node_location(child)
+                        if (line, col) == (0, 0) and hasattr(child, 'value'):
+                            line, col = self.get_literal_location(child.value)
+                        actual_switch = self.get_actual_name(switch_var) if switch_var else 'stream'
+                        self.error(
+                            f"Stream (switch) case type mismatch: variable '{actual_switch}' is '{switch_type}', "
+                            f"but case value is '{case_type}'. Case literals must match the stream variable type.",
+                            line, col,
+                        )
             elif child.type == 'stmt_list':
                 self.visit(child)
             elif child.type == 'switch_cases':
@@ -1537,6 +1638,41 @@ class SemanticAnalyzer:
 
     # -------------------- Expression Type Resolution --------------------
 
+    def _check_relational_string_constraints(self, left_node, rela_tail_node):
+        """
+        Enforce that string operands are not used with magnitude relational operators.
+        Allowed operators for strings are only '==' and '!='.
+        """
+        if rela_tail_node is None or getattr(rela_tail_node, 'type', None) != 'rela_tail':
+            return
+        if not getattr(rela_tail_node, 'children', None) or len(rela_tail_node.children) < 2:
+            return
+
+        rela_sym_node = rela_tail_node.children[0]
+        right_node = rela_tail_node.children[1]
+
+        op = None
+        if hasattr(rela_sym_node, 'children') and rela_sym_node.children:
+            op_token = rela_sym_node.children[0]
+            op = getattr(op_token, 'value', None)
+
+        # Only apply this rule to magnitude operators
+        if op not in ('>', '<', '>=', '<='):
+            return
+
+        left_type = self._get_expression_type(left_node)
+        right_type = self._get_expression_type(right_node) if right_node is not None else None
+
+        if left_type == 'string' or right_type == 'string':
+            line, col = self._find_value_location(rela_tail_node)
+            if (line, col) == (0, 0):
+                line, col = self.get_node_location(rela_tail_node)
+            self.error(
+                "Semantic Error: String types cannot be used with magnitude relational operators. "
+                "Only == and != are permitted for strings.",
+                line, col,
+            )
+
     def _get_expression_type(self, node):
         if node is None:
             return None
@@ -1553,6 +1689,9 @@ class SemanticAnalyzer:
                 symbol = self.lookup(node.value)
                 if symbol:
                     return symbol['data_type']
+                line, col = self.get_location(node.value) or self.get_node_location(node)
+                actual_name = self.get_actual_name(node.value)
+                self.error(f"Undeclared identifier '{actual_name}'", line, col)
                 return None
             # identifier → id id_tail with id_tail → param_opts (call) or id_access . member
             if hasattr(node, 'children') and node.children and len(node.children) >= 2:
@@ -1649,14 +1788,22 @@ class SemanticAnalyzer:
                     return self._resolve_binary_type(child_type, node.children[1])
                 if node.type == 'rela_expr' and len(node.children) > 1:
                     tail = node.children[1]
+                    if tail.type == 'rela_tail' and tail.children and len(tail.children) >= 2:
+                        # Recurse into right operand and enforce string constraints
+                        self._check_relational_string_constraints(node.children[0], tail)
+                        self._get_expression_type(tail.children[1])
                     if tail.type == 'rela_tail' and tail.children:
                         return 'bool'
                 if node.type == 'logic_expr' and len(node.children) > 1:
                     tail = node.children[1]
                     if tail.type == 'or_tail' and tail.children:
+                        self._get_expression_type(tail.children[0])  # right and_expr
+                    if tail.type == 'or_tail' and tail.children:
                         return 'bool'
                 if node.type == 'and_expr' and len(node.children) > 1:
                     tail = node.children[1]
+                    if tail.type == 'and_tail' and tail.children:
+                        self._get_expression_type(tail.children[0])  # right rela_expr
                     if tail.type == 'and_tail' and tail.children:
                         return 'bool'
                 return child_type
@@ -1870,8 +2017,47 @@ class SemanticAnalyzer:
         
         process_node(row_size_node)
         return dimensions if dimensions else ['unsized']
+
+    def _get_array_declared_size(self, row_size_node):
+        """
+        Try to extract a constant integer declared size from a row_size node.
+        Handles cases like [3] where the size is an int literal, even when
+        wrapped in arith_expr/term/factor/primary/value nodes.
+        Returns an int or None if the size is not a simple constant.
+        """
+        if not hasattr(row_size_node, 'children'):
+            return None
+
+        def extract_int_literal(node):
+            """Recursively search for an int literal value node."""
+            if node is None or not hasattr(node, 'type'):
+                return None
+            if node.type == 'value' and hasattr(node, 'value'):
+                try:
+                    return int(node.value)
+                except (TypeError, ValueError):
+                    return None
+            if hasattr(node, 'children') and node.children:
+                for child in node.children:
+                    if hasattr(child, 'type'):
+                        result = extract_int_literal(child)
+                        if result is not None:
+                            return result
+            return None
+
+        for child in row_size_node.children:
+            if child.type == 'size' and child.children:
+                size_expr = child.children[0]  # typically an arith_expr
+                value = extract_int_literal(size_expr)
+                if value is not None:
+                    return value
+        return None
     
     def _validate_array_size(self, row_size_node, identifier=None):
+        """
+        Validate that array sizes are integers and, when they are literal constants,
+        that they are strictly greater than zero.
+        """
         if not row_size_node.children:
             return
         
@@ -1887,6 +2073,17 @@ class SemanticAnalyzer:
                         f"Array size for '{actual_name}' must be an integer, got '{size_type}'",
                         line, col,
                     )
+                else:
+                    # Attempt to evaluate a constant integer size for additional validation
+                    size_value = self._get_array_declared_size(row_size_node)
+                    if size_value is not None and size_value <= 0:
+                        line, col = self._find_value_location(child)
+                        if line == 0 and col == 0 and identifier:
+                            line, col = self.get_location(identifier)
+                        self.error(
+                            "Semantic Error: Invalid array size. Array size must be a positive integer strictly greater than zero.",
+                            line, col,
+                        )
             elif child.type == 'col_size' and child.children:
                 for col_child in child.children:
                     if col_child.type == 'pdim_size' and col_child.children:
@@ -1903,7 +2100,7 @@ class SemanticAnalyzer:
     
     def _validate_array_elements(self, array_node, expected_type, identifier=None):
         if not array_node.children:
-            return
+            return 0
         
         actual_name = self.get_actual_name(identifier) if identifier else 'array'
         element_index = [0]
@@ -1986,6 +2183,8 @@ class SemanticAnalyzer:
                 check_element(child)
             elif hasattr(child, 'type') and child.type != 'operator':
                 check_element(child)
+        
+        return element_index[0]
     
     def _is_array_element_compatible(self, array_type, element_type):
         """

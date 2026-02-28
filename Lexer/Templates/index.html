@@ -276,7 +276,7 @@
                     syntaxErrors = [{message: data.error, line: 0, column: 0}];
                 }
                 
-                displayResults(data.all_tokens, data.lexical_errors || [], syntaxErrors, true, data.semantic_errors || []);
+                displayResults(data.all_tokens, data.lexical_errors || [], syntaxErrors, true, data.semantic_errors || [], data.semantic_warnings || []);
                 
                 if (data.success) {
                     // ✅ Parsing successful
