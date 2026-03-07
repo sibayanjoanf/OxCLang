@@ -133,9 +133,12 @@ class SemanticAnalyzer:
             self.scope_stack.pop()
     
     def declare_symbol(self, name, symbol_type, data_type, **kwargs):
+        # Rule 20 / Invalid shadowing: name must not exist in any local scope (same function or nested block).
+        # Valid shadowing: name may exist only in global (scopes[0]); local then takes precedence.
+        for i in range(1, len(self.scopes)):
+            if name in self.scopes[i]:
+                return False
         current_scope = self.scopes[-1]
-        if name in current_scope:
-            return False
         current_scope[name] = {
             'name': name,
             'symbol_type': symbol_type,
@@ -448,7 +451,7 @@ class SemanticAnalyzer:
             if not self.declare_symbol(identifier, 'variable', data_type,
                                        is_array=is_array, array_dimensions=dimensions):
                 line, col = self.get_location(identifier)
-                self.error(f"Variable '{actual_name}' is already declared in this scope", line, col)
+                self.error(f"Duplicate variable declaration: '{actual_name}' is already declared in this scope", line, col)
             
             if len(node.children) > 3:
                 self._process_norm_tail(node.children[3], data_type)
@@ -500,7 +503,7 @@ class SemanticAnalyzer:
                 if not self.declare_symbol(identifier, 'variable', data_type,
                                            is_array=is_array, array_dimensions=dimensions):
                     line, col = self.get_location(identifier)
-                    self.error(f"Variable '{actual_name}' is already declared in this scope", line, col)
+                    self.error(f"Duplicate variable declaration: '{actual_name}' is already declared in this scope", line, col)
             
             elif child.type == 'norm_tail':
                 self._process_norm_tail(child, data_type)
@@ -550,7 +553,7 @@ class SemanticAnalyzer:
             
             if not self.declare_symbol(identifier, 'constant', data_type, is_constant=True):
                 line, col = self.get_location(identifier)
-                self.error(f"Constant '{actual_name}' is already declared in this scope", line, col)
+                self.error(f"Duplicate variable declaration: constant '{actual_name}' is already declared in this scope", line, col)
             
             if len(node.children) > 2:
                 self._check_const_initialization(node.children[2], data_type, identifier, actual_name)
@@ -592,7 +595,7 @@ class SemanticAnalyzer:
             if not self.declare_symbol(var_name, 'struct_instance', struct_type,
                                        is_constant=True, struct_type=struct_type):
                 line, col = self.get_location(var_name)
-                self.error(f"Constant '{actual_var}' is already declared in this scope", line, col)
+                self.error(f"Duplicate variable declaration: constant '{actual_var}' is already declared in this scope", line, col)
     
     def _check_const_initialization(self, node, expected_type, const_name, actual_name=None):
         if not node.children:
@@ -723,7 +726,7 @@ class SemanticAnalyzer:
                                                struct_type=struct_type):
                         line, col = self.get_location(var_name)
                         actual_var_name = self.get_actual_name(var_name)
-                        self.error(f"Variable '{actual_var_name}' is already declared in this scope", line, col)
+                        self.error(f"Duplicate variable declaration: '{actual_var_name}' is already declared in this scope", line, col)
                     
                     # Validate initializer values match struct member types
                     self._validate_struct_init(struct_tail, struct_type, var_name)
@@ -1510,7 +1513,7 @@ class SemanticAnalyzer:
                 if not self.declare_symbol(var_name, 'variable', data_type):
                     line, col = self.get_location(var_name)
                     actual = self.get_actual_name(var_name)
-                    self.error(f"Loop variable '{actual}' is already declared in this scope", line, col)
+                    self.error(f"Duplicate variable declaration: loop variable '{actual}' is already declared in this scope", line, col)
                 if for_vals_node and getattr(for_vals_node, 'type', None) == 'for_vals':
                     self.visit(for_vals_node)
             return
