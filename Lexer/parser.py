@@ -2187,25 +2187,26 @@ class Parser:
             for_vals_node = self.parse_for_vals()
             return ASTNode('for_init', children=[id_no, id_access_node, for_vals_node])
         elif current == 'int':
-            self.match('int')
+            data_type_node = self.parse_data_type()
             id_no = self.check_id()
             self.match('=')
             for_vals_node = self.parse_for_vals()
-            return ASTNode('for_init', children=[id_no, for_vals_node])
+            return ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
         elif current == 'float':
-            self.match('float')
+            data_type_node = self.parse_data_type()
             id_no = self.check_id()
             self.match('=')
             for_vals_node = self.parse_for_vals()
-            return ASTNode('for_init', children=[id_no, for_vals_node])
+            return ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
         elif current == 'char':
-            self.match('char')
+            data_type_node = self.parse_data_type()
             id_no = self.check_id()
             self.match('=')
             for_vals_node = self.parse_for_vals()
-            return ASTNode('for_init', children=[id_no, for_vals_node])
+            return ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
         else:
-            self.error(f"Unexpected token: '{current}' | Expected 'do'")        
+            self.error(f"Unexpected token: '{current}' | Expected identifier, 'int', 'float', or 'char'") 
+            
 
     # <for_vals>
     # Production 179-181: <for_vals> → int_lit | float_lit | char_lit
@@ -2437,4 +2438,5 @@ class Parser:
     #         raise SyntaxError(
     #             f"Expected data type (int, float, char, string, bool), "
     #             f"got '{current}' at line {self.current_token.line}"
+
     #         )

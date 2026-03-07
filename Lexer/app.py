@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 from lexer import Lexer
 from parser import Parser
+from semantic import SemanticAnalyzer
 
 app = Flask(__name__)
 
@@ -61,17 +62,28 @@ def parse():
             'success': False,
             'all_tokens': tokens_dict,  
             'lexical_errors': [],
-            'syntax_errors': syntax_errors_dict
+            'syntax_errors': syntax_errors_dict,
+            'semantic_errors': []
         })
-    else:
-        return jsonify({
-            'success': True,
-            'message': 'Parsing successful!',
-            'all_tokens': tokens_dict, 
-            'lexical_errors': [],
-            'syntax_errors': [],     
-            'ast': ast.to_dict() if ast else None
-        })
+
+    # Semantic Analysis
+    semantic_errors = []
+    semantic_warnings = []
+    if ast:
+        analyzer = SemanticAnalyzer(ast, valid_tokens)
+        semantic_errors = [err.to_dict() for err in analyzer.analyze()]
+        semantic_warnings = [w.to_dict() for w in analyzer.warnings]
+
+    return jsonify({
+        'success': True if not semantic_errors else False,
+        'message': 'Parsing successful!' if not semantic_errors else 'Semantic errors found.',
+        'all_tokens': tokens_dict, 
+        'lexical_errors': [],
+        'syntax_errors': [],     
+        'semantic_errors': semantic_errors,
+        'semantic_warnings': semantic_warnings,
+        'ast': ast.to_dict() if ast else None
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
