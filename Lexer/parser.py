@@ -67,6 +67,7 @@ class Parser:
         self.bracket_depth = 0  
         self.in_array_size = False
         self.rela_used = False
+        self.in_echo = False
     
     def error(self, message):
         if self.position == self.error_reported_at_position:
@@ -1084,7 +1085,9 @@ class Parser:
         if current in ['++', '--']:
             unary_op_node = self.parse_unary_op()
             id_no = self.check_id()
-            id_access_node = self.parse_id_access(78)
+            id_access_node = None
+            if not self.in_echo:
+                id_access_node = self.parse_id_access(78)
             self.match('~')
             return ASTNode('identifier_stat', children=[unary_op_node, id_no, id_access_node])
         elif current and current.startswith('id'):
@@ -1689,6 +1692,7 @@ class Parser:
 
     def parse_arith_tail(self):
         current = self.peek()
+        expected = "+, -, *, /, %, ||, &&"
 
         if current in ['+', '-']:
             arith_op1_node = self.parse_arith_op1()
@@ -1701,10 +1705,22 @@ class Parser:
             term_node = self.parse_term()
             arith_tail_node = self.parse_arith_tail()
             return ASTNode('arith_tail', children=[arith_op1_node, term_node, arith_tail_node])
-        elif current in ['~', ',', ']', ')', '||', '&&', '>', '<', '>=', '<=', '==', '!=']:
+        elif current in ['~', ',', ']', ')', '||', '&&']:
             return ASTNode('arith_tail_empty')
+        elif current in ['>', '<', '>=', '<=', '==', '!=']:
+            if self.rela_used:
+                if self.paren_depth > 0:
+                    self.error(f"Unexpected token: '{current}' | Expected {expected}, or ) to close")
+
+                elif self.in_array_size:
+                    self.error(f"Unexpected token: '{current}' | Expected {expected}, or ] to close")
+
+                else:
+                    self.error(f"Unexpected token: '{current}' | Expected {expected}, or ~ to terminate statement")
+            else:
+                return ASTNode('arith_tail_empty')
         else:
-            expected = "+, -, *, /, %, ||, &&"
+
             if not self.rela_used:
                 expected += ", >, <, >=, <=, ==, !="
 
