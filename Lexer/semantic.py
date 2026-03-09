@@ -22,6 +22,8 @@ class SemanticAnalyzer:
     PRIMITIVE_TYPES = {'int', 'float', 'char', 'string', 'bool'}
     UNARY_TYPES = {'int', 'char'}
     ARITHMETIC_TYPES = {'int', 'float', 'char'}
+    # Per spec v2 §14.3: bool allowed in arithmetic (complex expressions); implicitly converts to int (yuh→1, naur→0)
+    ARITHMETIC_OPERAND_TYPES = ARITHMETIC_TYPES | {'bool'}
     RELATIONAL_TYPES = {'int', 'float', 'char'}
     CONCAT_TYPES = {'string', 'char'}
 
@@ -1765,13 +1767,15 @@ class SemanticAnalyzer:
             right_type = self._get_expression_type(right)
             op = op_node.value if hasattr(op_node, 'value') else None
             
-            # Modulus requires integers
-            if op == '%' and right_type and right_type != 'int':
+            # Modulus requires integers (bool allowed per v2 §14.3, treated as int)
+            if op == '%' and right_type and right_type not in ('int', 'bool'):
                 line, col = self._find_value_location(right)
                 self.error(f"Modulus operator '%%' requires integer operands, got '{right_type}'", line, col)
             
             if right_type == 'float' or right_type == 'int':
                 return right_type
+            if right_type == 'bool':
+                return 'int'
             return right_type
         
         if node.type == 'term_tail' and node.children and len(node.children) >= 2:
@@ -1780,7 +1784,7 @@ class SemanticAnalyzer:
             right_type = self._get_expression_type(right)
             op = op_node.value if hasattr(op_node, 'value') else None
             
-            if op == '%' and right_type and right_type != 'int':
+            if op == '%' and right_type and right_type not in ('int', 'bool'):
                 line, col = self._find_value_location(right)
                 self.error(f"Modulus operator '%%' requires integer operands, got '{right_type}'", line, col)
             
@@ -1850,33 +1854,37 @@ class SemanticAnalyzer:
         
         op = op_node.value if op_node and hasattr(op_node, 'value') else None
         
-        # Validate arithmetic operand types
-        if left_type and left_type not in self.ARITHMETIC_TYPES:
+        # Validate arithmetic operand types (bool allowed per v2 §14.3 complex expressions; treated as int)
+        if left_type and left_type not in self.ARITHMETIC_OPERAND_TYPES:
             line, col = self._find_value_location(tail_node)
             self.error(f"Cannot perform arithmetic on type '{left_type}'", line, col)
-        if right_type and right_type not in self.ARITHMETIC_TYPES:
+        if right_type and right_type not in self.ARITHMETIC_OPERAND_TYPES:
             line, col = self._find_value_location(right_node)
             self.error(f"Cannot perform arithmetic on type '{right_type}'", line, col)
         
-        # Modulus is integer-only
+        # For result type and %, treat bool as int (implicit conversion)
+        effective_left = 'int' if left_type == 'bool' else left_type
+        effective_right = 'int' if right_type == 'bool' else right_type
+
+        # Modulus is integer-only (bool counts as int)
         if op == '%':
-            if left_type and left_type != 'int':
+            if effective_left and effective_left != 'int':
                 line, col = self._find_value_location(tail_node)
                 self.error(f"Modulus operator '%%' requires integer operands, got '{left_type}'", line, col)
-            if right_type and right_type != 'int':
+            if effective_right and effective_right != 'int':
                 line, col = self._find_value_location(right_node)
                 self.error(f"Modulus operator '%%' requires integer operands, got '{right_type}'", line, col)
             return 'int'
         
-        # If either operand is float, result is float
-        if left_type == 'float' or right_type == 'float':
+        # If either operand is float, result is float; else int (including bool→int)
+        if effective_left == 'float' or effective_right == 'float':
             result = 'float'
-        elif left_type == 'char' and right_type == 'char':
+        elif effective_left == 'char' and effective_right == 'char':
             result = 'int'
-        elif left_type == 'char' or right_type == 'char':
+        elif effective_left == 'char' or effective_right == 'char':
             result = 'int'
         else:
-            result = left_type or right_type
+            result = effective_left or effective_right or 'int'
         
         # Check for further chained tail
         if len(tail_node.children) > 2:
