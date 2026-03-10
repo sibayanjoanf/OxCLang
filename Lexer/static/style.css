@@ -286,6 +286,37 @@ span {
     line-height: 1.8;
 }
 
+.terminal-output {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--color-text-light);
+}
+
+.terminal-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 10px 10px;
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.terminal-prompt {
+    color: var(--color-text-light);
+    opacity: 0.9;
+    white-space: pre;
+}
+
+.terminal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--color-text-light);
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+}
+
 .token-error {
     background: var(--color-error-bg) !important;
 }

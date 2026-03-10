@@ -68,6 +68,10 @@ class SemanticAnalyzer:
         self.scope_stack = ['global']
         
         self.structures = {}
+        # Persistent map from identifier token type (e.g. 'id1') to declared
+        # data type ('int', 'string', etc.), so the interpreter can enforce
+        # types at runtime even after semantic scopes have been popped.
+        self.declared_types = {}
         
         self.current_function = None
         self.current_function_return_type = None
@@ -141,7 +145,7 @@ class SemanticAnalyzer:
             if name in self.scopes[i]:
                 return False
         current_scope = self.scopes[-1]
-        current_scope[name] = {
+        entry = {
             'name': name,
             'symbol_type': symbol_type,
             'data_type': data_type,
@@ -156,12 +160,16 @@ class SemanticAnalyzer:
             'struct_members': kwargs.get('struct_members', {}),
             'struct_type': kwargs.get('struct_type', None),
         }
+        current_scope[name] = entry
+        # Record declared type for this identifier token so the interpreter
+        # can look it up later by token type (e.g. 'id1' -> 'string').
+        self.declared_types[name] = data_type
         return True
     
     def declare_global(self, name, symbol_type, data_type, **kwargs):
         if name in self.scopes[0]:
             return False
-        self.scopes[0][name] = {
+        entry = {
             'name': name,
             'symbol_type': symbol_type,
             'data_type': data_type,
@@ -176,6 +184,9 @@ class SemanticAnalyzer:
             'struct_members': kwargs.get('struct_members', {}),
             'struct_type': kwargs.get('struct_type', None),
         }
+        self.scopes[0][name] = entry
+        # Also record in declared_types for runtime use.
+        self.declared_types[name] = data_type
         return True
     
     def lookup(self, name):

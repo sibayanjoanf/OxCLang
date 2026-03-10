@@ -41,7 +41,13 @@
 
     <div class="error-section">
         <div class="error-header">Output Code</div>
-        <div id="errorOutput"></div>
+        <div id="errorOutput">
+            <pre id="terminalOutput" class="terminal-output"></pre>
+            <div id="terminalInputRow" class="terminal-input-row" style="display:none;">
+                <span id="terminalPrompt" class="terminal-prompt"></span>
+                <input id="terminalInput" class="terminal-input" type="text" autocomplete="off" spellcheck="false" />
+            </div>
+        </div>
     </div>
 
     <script>
@@ -50,6 +56,10 @@
         const lineNumbers = document.getElementById('lineNumbers');
         const tokenOutput = document.getElementById('tokenOutput');
         const errorOutput = document.getElementById('errorOutput');
+        const terminalOutput = document.getElementById('terminalOutput');
+        const terminalInputRow = document.getElementById('terminalInputRow');
+        const terminalPrompt = document.getElementById('terminalPrompt');
+        const terminalInput = document.getElementById('terminalInput');
         const runButton = document.getElementById('runButton');
         const themeSwitch = document.getElementById('themeSwitch');
         const themeIcon = document.getElementById('theme-icon');
@@ -110,76 +120,69 @@
             lineNumbers.textContent = lineNumbersHtml;
         }
 
-        function displayResults(allTokens, lexicalErrors, syntaxErrors, syntaxInitialized, semanticErrors, semanticWarnings) {
-            semanticWarnings = semanticWarnings || [];
-            const validTokens = allTokens.filter(token => !token.is_error);
-
+        function displayTokens(allTokens) {
+            const validTokens = (allTokens || []).filter(token => !token.is_error);
             if (validTokens.length === 0) {
                 tokenOutput.innerHTML = '<div style="color: #474747; padding: 10px;">No tokens yet. Start typing in the editor...</div>';
             } else {
-                tokenOutput.innerHTML = validTokens.map((token, i) => {
-                    const errorClass = token.is_error ? 'token-error' : '';
-                    return `
-                        <div class="token">
-                            <span class="token-line">${i + 1}</span>
-                            <span class="token-value">${escapeHtml(token.value)}</span>
-                            <span class="token-type">${token.type}</span>
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            let errorHTML = '';
-
-            if (!lexicalErrors || lexicalErrors.length === 0) {
-                errorHTML += '<div class="error-item" style="color: #474747;">No lexical errors detected.</div>';
-                if (!syntaxInitialized) {
-                    errorHTML += '<div class="error-item" style="color: #474747;">Syntax analyzer not initialized yet.</div>';
-                } else if (!syntaxErrors || syntaxErrors.length === 0) {
-                    errorHTML += '<div class="error-item" style="color: #474747;">No syntax errors detected.</div>';
-                }
-            }       
-
-            // Lexical Errors
-            if (lexicalErrors && lexicalErrors.length > 0) {
-                // errorHTML += '<div style="font-weight: bold; padding: 5px; border-bottom: 1px solid #ccc;">Lexical Errors:</div>';
-                errorHTML += lexicalErrors.map((error) => `
-                    <div class="error-item">
-                        <span class="lexical-impostor" style="font-weight: bold;">Lexical Impostor:</span>
-                        <span class="error-details">${escapeHtml(error.value)}</span>
-                        <span class="error-location">[Line ${error.line}, Col ${error.column}]</span>
+                tokenOutput.innerHTML = validTokens.map((token, i) => `
+                    <div class="token">
+                        <span class="token-line">${i + 1}</span>
+                        <span class="token-value">${escapeHtml(token.value)}</span>
+                        <span class="token-type">${token.type}</span>
                     </div>
                 `).join('');
             }
-            
-            // Syntax Errors
-            if (syntaxErrors && syntaxErrors.length > 0) {
-                // errorHTML += '<div style="font-weight: bold; padding: 5px; border-bottom: 1px solid #ccc; margin-top: 10px;">Syntax Errors:</div>';
-                errorHTML += syntaxErrors.map((error) => `
-                    <div class="error-item">
-                        <span class="syntactical-impostor" style="color: #8d1d1d; font-weight: bold;">Syntactical Impostor:</span>
-                        <span class="error-details">${escapeHtml(error.message)}</span>
-                        ${error.line > 0 ? `<span class="error-location">[Line ${error.line}, Col ${error.column}]</span>` : ''}
-                    </div>
-                `).join('');
+        }
+
+        function resetTerminalUI() {
+            terminalOutput.textContent = '';
+            terminalPrompt.textContent = '';
+            terminalInput.value = '';
+            terminalInputRow.style.display = 'none';
+        }
+
+        function renderCompileErrors(lexicalErrors, syntaxErrors, semanticErrors) {
+            resetTerminalUI();
+            terminalInputRow.style.display = 'none';
+
+            const lines = [];
+
+            (lexicalErrors || []).forEach((e) => {
+                lines.push(`Lexical Impostor: ${e.value} [Line ${e.line}, Col ${e.column}]`);
+            });
+            (syntaxErrors || []).forEach((e) => {
+                lines.push(`Syntactical Impostor: ${e.message}${e.line > 0 ? ` [Line ${e.line}, Col ${e.column}]` : ''}`);
+            });
+            (semanticErrors || []).forEach((e) => {
+                lines.push(`Semantic Impostor: ${e.message}${e.line > 0 ? ` [Line ${e.line}, Col ${e.column}]` : ''}`);
+            });
+
+            if (lines.length === 0) {
+                terminalOutput.textContent = 'No errors detected.\n';
+                return;
+            }
+            terminalOutput.textContent = lines.join('\n') + '\n';
+        }
+
+        function renderTerminal(terminal) {
+            resetTerminalUI();
+            terminalOutput.textContent = terminal.output || '';
+
+            if (terminal.runtime_errors && terminal.runtime_errors.length > 0) {
+                const errText = terminal.runtime_errors
+                    .map(e => `Runtime error: ${e.message}${e.line ? ` [Line ${e.line}, Col ${e.column}]` : ''}`)
+                    .join('\n');
+                terminalOutput.textContent += (terminalOutput.textContent.endsWith('\n') || terminalOutput.textContent === '' ? '' : '\n') + errText + '\n';
             }
 
-            // Semantic Errors
-            if (semanticErrors && semanticErrors.length > 0) {
-                errorHTML += semanticErrors.map((error) => `
-                    <div class="error-item">
-                        <span class="semantic-impostor" style="color: #c44900; font-weight: bold;">Semantic Impostor:</span>
-                        <span class="error-details">${escapeHtml(error.message)}</span>
-                        ${error.line > 0 ? `<span class="error-location">[Line ${error.line}, Col ${error.column}]</span>` : ''}
-                    </div>
-                `).join('');
-            } else if (syntaxInitialized && (!syntaxErrors || syntaxErrors.length === 0) && (!lexicalErrors || lexicalErrors.length === 0) && (!semanticErrors || semanticErrors.length === 0)) {
-                errorHTML += '<div class="error-item" style="color: #474747;">No semantic errors detected.</div>';
-            }
-   
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
 
-            
-            errorOutput.innerHTML = errorHTML;
+            if (terminal.waiting_for_input) {
+                terminalPrompt.textContent = terminal.prompt || '';
+                terminalInputRow.style.display = 'flex';
+                terminalInput.focus();
+            }
         }
 
         function syncHighlight() {
@@ -221,8 +224,7 @@
         
         // run button'ed
         runButton.addEventListener('click', () => {
-            runParser();
-            console.log("girl");
+            runProgram();
         });
 
         // document.addEventListener('keydown', (e) => {
@@ -250,18 +252,21 @@
             })
             .then(response => response.json())
             .then(data => {
-                displayResults(data.all_tokens, data.errors, [], false, []);
+                displayTokens(data.all_tokens);
             })
             .catch(error => {
                 console.error('Error:', error);
-                errorOutput.innerHTML = '<div class="error-item"><span style="color: #8d1d1d;">Error connecting to server</span></div>';
+                resetTerminalUI();
+                terminalOutput.textContent = 'Error connecting to server\n';
             });
         }
 
-        function runParser() {
+        let terminalSessionId = null;
+
+        function runProgram() {
             const code = codeInput.value;
             
-            fetch('/parse', {
+            fetch('/run', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -270,64 +275,63 @@
             })
             .then(response => response.json())
             .then(data => {
-                let syntaxErrors = data.syntax_errors || [];
+                const lex = data.lexical_errors || [];
+                const syn = data.syntax_errors || [];
+                const sem = data.semantic_errors || [];
 
-                if (!data.success && data.error && syntaxErrors.length === 0) {
-                    syntaxErrors = [{message: data.error, line: 0, column: 0}];
+                if (!data.success && (lex.length || syn.length || sem.length)) {
+                    terminalSessionId = null;
+                    renderCompileErrors(lex, syn, sem);
+                    return;
                 }
-                
-                displayResults(data.all_tokens, data.lexical_errors || [], syntaxErrors, true, data.semantic_errors || [], data.semantic_warnings || []);
-                
-                if (data.success) {
-                    // ✅ Parsing successful
-                    console.log('✅ Parsing successful!');
-                    console.log('AST:', data.ast);
-                }                    
-                // } else {
-                //     // ❌ Parsing failed - ADD syntax error to existing errors
-                //     console.log('❌ Parsing failed:', data.error);
-                    
-                //     // Extract line and column from error message
-                //     const errorMsg = data.error;
-                //     const lineMatch = errorMsg.match(/line (\d+)/);
-                //     const colMatch = errorMsg.match(/column (\d+)/);
-                    
-                //     let locationStr = '';
-                //     if (lineMatch && colMatch) {
-                //         locationStr = `<span class="error-location">[Line ${lineMatch[1]}, Col ${colMatch[1]}]</span>`;
-                //     }
-                    
-                //     // Create syntax error HTML
-                //     const syntaxErrorHTML = `
-                //         <div class="error-item">
-                //             <span class="syntactical-impostor" style="color: #8d1d1d; font-weight: bold;">Syntactical Impostor:</span>
-                //             <span class="error-details">${escapeHtml(errorMsg)}</span>
-                //             ${locationStr}
-                //         </div>
-                //     `;
-                    
-                //     // APPEND syntax error to existing content (don't replace)
-                //     // Check if there are already errors displayed
-                //     if (errorOutput.innerHTML.includes('No lexical errors detected')) {
-                //         // Replace the "no errors" message with the syntax error
-                //         errorOutput.innerHTML = syntaxErrorHTML;
-                //     } else {
-                //         // Add syntax error AFTER lexical errors
-                //         errorOutput.innerHTML += syntaxErrorHTML;
-                //     }
-                // }
+
+                if (data.terminal) {
+                    terminalSessionId = data.terminal.session_id;
+                    renderTerminal(data.terminal);
+                    return;
+                }
+
+                resetTerminalUI();
+                terminalOutput.textContent = 'No terminal data returned.\n';
             })
             .catch(error => {
                 console.error('Error:', error);
-                errorOutput.innerHTML = '<div class="error-item"><span style="color: #8d1d1d;">Error connecting to server</span></div>';
-                
-                // if (errorOutput.innerHTML.includes('No lexical errors detected')) {
-                //     errorOutput.innerHTML = connectionErrorHTML;
-                // } else {
-                //     errorOutput.innerHTML += connectionErrorHTML;
-                // }
+                resetTerminalUI();
+                terminalOutput.textContent = 'Error connecting to server\n';
             });
         }
+
+        terminalInput.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            if (!terminalSessionId) return;
+
+            const userText = terminalInput.value;
+            terminalInput.value = '';
+
+            fetch('/stdin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: terminalSessionId, input: userText })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success && data.error) {
+                    terminalSessionId = null;
+                    resetTerminalUI();
+                    terminalOutput.textContent = `${data.error}\n`;
+                    return;
+                }
+                if (data.terminal) {
+                    renderTerminal(data.terminal);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                resetTerminalUI();
+                terminalOutput.textContent = 'Error connecting to server\n';
+            });
+        });
 
         function escapeHTML(str) {
             return str
@@ -386,7 +390,8 @@
         });
 
         updateLineNumbers();
-        displayResults([], [], [], false, []);
+        displayTokens([]);
+        resetTerminalUI();
     </script>
 </body>
 </html>
