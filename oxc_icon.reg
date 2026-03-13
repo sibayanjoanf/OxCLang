@@ -1,0 +1,10 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\.oxc]
+@="OxclangFile"
+
+[HKEY_CURRENT_USER\Software\Classes\OxclangFile]
+@="OxC Lang Source File"
+
+[HKEY_CURRENT_USER\Software\Classes\OxclangFile\DefaultIcon]
+@="C:\\Users\\Russell\\OxCLang\\Lexer\\static\\oxc.ico"

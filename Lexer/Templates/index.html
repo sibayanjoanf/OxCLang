@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OxCLang Compiler</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='oxc.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
@@ -26,6 +27,17 @@
             </svg>
             Save
         </button>
+        <div class="filename-wrapper">
+            <input 
+                type="text" 
+                id="filenameInput" 
+                class="filename-input" 
+                placeholder="filename"
+                maxlength="128"
+                spellcheck="false"
+            />
+            <span class="filename-ext">.oxc</span>
+        </div>
     </div>
 
     <div class="header-right">
@@ -99,6 +111,8 @@
         const colLabels = document.getElementById('colLabels');
         const terminalWrapper = document.getElementById('terminalWrapper');
 
+        const filenameInput = document.getElementById('filenameInput');
+
         // auto-indent with Tab key
         codeInput.addEventListener('keydown', (e) => {
             if (e.key === 'Tab') {
@@ -111,6 +125,37 @@
                 // Insert 2 spaces for a tab
                 codeInput.value = value.substring(0, start) + '  ' + value.substring(end);
                 codeInput.selectionStart = codeInput.selectionEnd = start + 2;
+                codeInput.dispatchEvent(new Event('input'));
+            }
+
+            if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+                e.preventDefault();
+
+                const start = codeInput.selectionStart;
+                const end = codeInput.selectionEnd;
+                const lines = codeInput.value.split('\n');
+
+                // figure out which lines are selected
+                let charCount = 0;
+                let startLine = 0, endLine = 0;
+                for (let i = 0; i < lines.length; i++) {
+                    if (charCount + lines[i].length >= start && startLine === 0 && charCount <= start) startLine = i;
+                    if (charCount + lines[i].length >= end) { endLine = i; break; }
+                    charCount += lines[i].length + 1;
+                }
+
+                // check if all selected lines are already commented
+                const allCommented = lines.slice(startLine, endLine + 1).every(l => l.trimStart().startsWith('//'));
+
+                for (let i = startLine; i <= endLine; i++) {
+                    if (allCommented) {
+                        lines[i] = lines[i].replace(/^(\s*)\/\/\s?/, '$1');
+                    } else {
+                        lines[i] = '//' + lines[i];
+                    }
+                }
+
+                codeInput.value = lines.join('\n');
                 codeInput.dispatchEvent(new Event('input'));
             }
             
@@ -299,6 +344,7 @@
             highlight.style.top = (40 - codeInput.scrollTop) + 'px';
         });
 
+
         // Update line numbers on input
         codeInput.addEventListener('input', (e) => {
             updateLineNumbers();
@@ -414,7 +460,19 @@
 
         function colorCode(code) {
             let escaped = escapeHTML(code);
+            const comments = [];
 
+            escaped = escaped.replace(/(&#x2F;&#x2F;[^\n]*)/g, (match) => {
+                comments.push(match);
+                return `\x00COMMENT${comments.length - 1}\x00`;
+            });
+
+            // extract multi line comments
+            escaped = escaped.replace(/(&#x2F;~[\s\S]*?(?:~&#x2F;|$))/g, (match) => {
+                comments.push(match);
+                return `\x00COMMENT${comments.length - 1}\x00`;
+            });
+            
             // data types :D
             escaped = escaped.replace(/\b(int|float|char|string|bool|vacuum|gust|yuh|naur)\b/g,
                 '<span class="dataTypes">$1</span>'
@@ -439,6 +497,20 @@
             escaped = escaped.replace(/\b\d+\b/g,
                 '<span class="num">$&</span>'
             );
+
+            // single line comments
+            escaped = escaped.replace(/(&#x2F;&#x2F;[^\n]*)/g,
+                '<span class="comment">$1</span>'
+            );
+
+            // multi line comments
+            escaped = escaped.replace(/(&#x2F;~[\s\S]*?~&#x2F;)/g,
+                '<span class="comment">$1</span>'
+            );
+            
+            escaped = escaped.replace(/\x00COMMENT(\d+)\x00/g, (_, i) => {
+                return `<span class="comment">${comments[parseInt(i)]}</span>`;
+            });
 
             console.log(escaped);
             return escaped;
@@ -466,6 +538,106 @@
         updateLineNumbers();
         displayTokens([]);
         resetTerminalUI();
+
+        // Drag and drop .oxc files into the editor
+        const editorWrapper = document.querySelector('.editor-wrapper');
+        
+
+        editorWrapper.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            editorWrapper.classList.add('drag-over');
+        });
+
+        editorWrapper.addEventListener('dragleave', () => {
+            editorWrapper.classList.remove('drag-over');
+        });
+
+        editorWrapper.addEventListener('drop', (e) => {
+            e.preventDefault();
+            editorWrapper.classList.remove('drag-over');
+
+            const file = e.dataTransfer.files[0];
+            if (!file || !file.name.endsWith('.oxc')) return;
+
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                codeInput.value = ev.target.result;
+                setFilename(file.name); 
+                codeInput.dispatchEvent(new Event('input')); // triggers lexer + highlights + line numbers
+            };
+            reader.readAsText(file);
+        });
+
+        function setFilename(fullname) {
+            // strips the .oxc extension if present
+            const name = fullname.replace(/\.oxc$/i, '');
+            filenameInput.value = name;
+            filenameInput.dispatchEvent(new Event('input')); // triggers validation colors
+        }
+
+        // Open button
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.oxc';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        document.getElementById('openButton').addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                codeInput.value = ev.target.result;
+                setFilename(file.name);
+                codeInput.dispatchEvent(new Event('input'));
+            };
+            reader.readAsText(file);
+            fileInput.value = ''; // reset so same file can be reopened
+        });
+
+        // Save button
+        
+        const validFilename = /^[a-zA-Z0-9][a-zA-Z0-9._\- ]*$/;
+
+        filenameInput.addEventListener('input', () => {
+            const val = filenameInput.value;
+            if (val === '') {
+                filenameInput.classList.remove('input-valid', 'input-invalid');
+            } else if (validFilename.test(val)) {
+                filenameInput.classList.add('input-valid');
+                filenameInput.classList.remove('input-invalid');
+            } else {
+                filenameInput.classList.add('input-invalid');
+                filenameInput.classList.remove('input-valid');
+            }
+        });
+
+        document.getElementById('saveButton').addEventListener('click', () => {
+            const name = filenameInput.value.trim();
+
+            if (name === '') {
+                filenameInput.classList.add('input-invalid');
+                filenameInput.focus();
+                return;
+            }
+            if (!validFilename.test(name)) {
+                filenameInput.classList.add('input-invalid');
+                filenameInput.focus();
+                return;
+            }
+
+            const blob = new Blob([codeInput.value], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${name}.oxc`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });       
     </script>
 </body>
 </html>

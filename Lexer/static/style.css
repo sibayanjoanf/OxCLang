@@ -477,6 +477,71 @@ span {
     vertical-align: baseline;
 }
 
+.editor-wrapper.drag-over {
+    outline: 2px dashed #7eb3ff;
+    background: rgba(126, 179, 255, 0.05);
+}
+
+.editor-wrapper.drag-over::after {
+    content: 'Drop .oxc file to open';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(126, 179, 255, 0.08);
+    border-radius: 6px;
+    color: #7eb3ff;
+    font-size: 1rem;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.filename-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 4px;
+    padding: 4px 9px;
+    opacity: 0.55;
+    transition: all 0.15s ease;
+}
+
+.filename-wrapper:focus-within {
+    opacity: 1;
+    border-color: var(--color-border-subtle);
+}
+
+.filename-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--color-text-light);
+    font-family: 'Monocraft', 'Segoe UI', monospace;
+    font-size: 11px;
+    width: 200px;
+    padding: 0;
+    caret-color: var(--color-text-light);
+}
+
+.filename-ext {
+    color: var(--color-line-number);
+    font-family: 'Monocraft', 'Segoe UI', monospace;
+    font-size: 11px;
+    user-select: none;
+}
+
+.filename-wrapper:has(.input-invalid) {
+    border-color: var(--color-error-text);
+    opacity: 1;
+}
+
+.filename-wrapper:has(.input-valid) {
+    border-color: var(--color-action-primary);
+    opacity: 1;
+}
+
 /* ── Token Styles ── */
 
 .token-error {
@@ -513,6 +578,7 @@ span {
 .consy { color: var(--color-syntax-constant) }
 .rw { color: var(--color-syntax-keyword) }
 .num { color: var(--color-syntax-number) }
+.comment { color: var(--color-line-number); }
 
 .token-type {
     color: var(--color-bg-token-type);
