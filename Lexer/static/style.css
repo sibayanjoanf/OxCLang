@@ -76,70 +76,160 @@ body {
     flex-direction: column;
     background: var(--color--color-bg-dark);
     color: var(--color-text-light);
+    overflow: hidden;
 }
+
+/* ── Header ── */
 
 .header {
     display: flex;
-    flex-direction: row;
-    margin: 30px 30px -18px 37px;
+    align-items: center;
     justify-content: space-between;
+    margin: 15px 20px 0 20px;
 }
 
-.header .icons {
+.header-left {
     display: flex;
-    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
 }
 
-.run-button {
-    font-family: 'Monocraft', 'Segoe UI', monospace, Tahoma, Geneva, Verdana, sans-serif;
-    margin-left: 15px; 
-    padding: 5px 12px;
-    border: none;
-    border-radius: 4px;
-    background-color: var(--color-action-primary); 
+.header-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+h1 {
+    font-size: 20px;
+    font-weight: 500;
     color: var(--color-text-light);
-    font-weight: bold;
-    font-size: 12px;
-    cursor:pointer; 
+    letter-spacing: 0.04em;
+}
+
+h1 span {
+    color: var(--color-action-primary);
+}
+
+.header-divider {
+    width: 0.5px;
+    height: 14px;
+    background: var(--color-border-subtle);
+    margin: 0 2px;
+    opacity: 0.6;
+}
+
+.file-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-text-light);
+    font-family: 'Monocraft', 'Segoe UI', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    opacity: 0.55;
+}
+
+.file-btn:hover {
+    background: var(--color-bg-tokens);
+    opacity: 1;
+}
+
+.file-btn svg {
+    width: 10px;
+    height: 10px;
+    stroke: currentColor;
+    fill: none;
 }
 
 .theme-switch {
-    margin-left: 25px;
-    padding: 5px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-text-light);
+    font-size: 11px;
+    opacity: 0.55;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.theme-switch:hover {
+    background: var(--color-bg-tokens);
+    opacity: 1;
+}
+
+.run-button {
+    font-family: 'Monocraft', 'Segoe UI', monospace;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 12px;
     border: none;
     border-radius: 4px;
-    background-color: var(--color-bg-editor); 
+    background-color: var(--color-action-primary);
     color: var(--color-text-light);
     font-weight: bold;
-    cursor: pointer; 
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s ease;
 }
 
 .run-button:hover {
     background-color: var(--color-action-hover);
 }
 
-.play-icon {
-    margin-right: 5px;
+.run-button:active {
+    transform: scale(0.97);
 }
 
-h1 {
-    font-size: 35px;
-    font-weight: 500;
-    color: var(--color-text-light);
+.play-icon {
+    font-size: 9px;
+    margin-right: 0;
 }
+
+/* ── Layout ── */
 
 .container {
     display: flex;
     flex: 1;
+    flex-direction: row;
+    gap: 15px;
+    margin: 15px;
     overflow: hidden;
-    margin: 30px;
-    gap: 20px;
+}
+
+.container2 {
+    display: flex;
+    flex: 6;
+    flex-direction: column;
+    overflow: hidden;
+    gap: 15px;
 }
 
 .editor-section {
-    width: 70%;
+    flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0;
 }
 
 .editor-wrapper {
@@ -157,7 +247,7 @@ h1 {
     background: var(--color-bg-editor);
     color: var(--color-line-number);
     font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 14px;
+    font-size: 12px;
     line-height: 1.6;
     text-align: right;
     user-select: none;
@@ -194,7 +284,7 @@ textarea:focus {
     white-space: pre;
     pointer-events: none;
     font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 14px;
+    font-size: 12px;
     line-height: 1.6;
     color: transparent;
     z-index: 10;
@@ -210,7 +300,7 @@ textarea:focus {
     word-break: normal;
     overflow-wrap: normal;
     border: none;
-    font-size: 14px;
+    font-size: 12px;
     color: var(--color-text-light);
     outline: none; 
     line-height: 1.6;
@@ -220,30 +310,75 @@ textarea:focus {
     z-index: 1;
 }
 
+#codeInput::placeholder {
+    color: #474747;
+}
+
 span {
     display: inline;
     white-space: pre;
-    
 }
 
+/* ── Output & Tokens ── */
+
 .output-section {
-    width: 30%;
+    flex: 4; 
+    height: 100%;   
     display: flex;
     flex-direction: column;
     background: var(--color-bg-editor);
     border-radius: 5px;
+    overflow: hidden;
 }
 
 .section-header {
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    background: var(--color-bg-editor);
+    border-bottom: 1px solid var(--color-border-subtle);
+    border-radius: 5px 5px 0 0;
+}
+
+.tabs {
+    display: flex;
+    gap: 0;
+}
+
+.tab {
+    font-family: 'Monocraft', 'Segoe UI', monospace;
+    font-size: 11px;
+    padding: 12px 16px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text-light);
+    opacity: 0.45;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-bottom: -1px;
+}
+
+.tab:hover {
+    opacity: 0.8;
+}
+
+.tab.active {
+    opacity: 1;
+    border-top: 2px solid var(--color-action-primary);
+    color: var(--color-action-primary);
+}
+
+.col-labels {
     display: flex;
     justify-content: space-between;
     padding: 15px 25px;
     background: var(--color-bg-editor);
     color: var(--color-text-light);
-    font-size: 14px;
+    font-size: 12px;
     font-weight: bold;
     border-bottom: 1px solid var(--color-border-subtle);
-    border-radius: 5px 5px 0 0;
 }
 
 #tokenOutput {
@@ -251,27 +386,35 @@ span {
     padding: 15px;
     overflow-y: auto;
     font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 13px;
-    line-height: 1.8;
+    font-size: 12px;
+    line-height: 1.6;
     border-radius: 5px;
     background-color: var(--color-bg-editor);
 }
 
+/* ── Error Section ── */
+
+.error-color {
+    color: var(--color-error-text) !important;
+    white-space: pre-wrap !important;
+    word-break: break-all !important;
+    overflow-wrap: anywhere !important;
+}
+
 .error-section {
-    min-height: 20vh; 
-    max-height: 20vh;
+    height: 20vh; 
+    flex-shrink: 0; 
     display: flex;
     flex-direction: column;
     background: var(--color-bg-editor);
-    margin: -20px 30px 30px 30px;
     border-radius: 5px;
+    margin: 0;
 }
 
 .error-header {
-    border-radius: -5px;
     background: var(--color--color-bg-dark);
     padding: 10px 5px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--color-text-light);
 }
@@ -279,26 +422,38 @@ span {
 #errorOutput {
     border-radius: 5px;
     flex: 1;
-    padding: 15px 10px;
+    padding: 10px 15px;
     overflow-y: auto;
     font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.8;
 }
 
+#terminalWrapper {
+    flex: 1;
+    padding: 10px 15px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex-direction: column;
+}
+
 .terminal-output {
+    font-size: 12px !important;
+    line-height: 1.8;
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
     color: var(--color-text-light);
-}
+    display: block;
+}   
 
 .terminal-input-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 10px 10px 10px;
-    border-top: 1px solid var(--color-border-subtle);
+    padding: 0px;
+    margin-top: 0;
 }
 
 .terminal-prompt {
@@ -308,14 +463,21 @@ span {
 }
 
 .terminal-input {
-    flex: 1;
     background: transparent;
     border: none;
     outline: none;
     color: var(--color-text-light);
     font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 13px;
+    font-size: 12px !important;
+    padding: 0;
+    margin: 0;
+    width: auto;         
+    min-width: 120px;
+    display: inline;     
+    vertical-align: baseline;
 }
+
+/* ── Token Styles ── */
 
 .token-error {
     background: var(--color-error-bg) !important;
@@ -381,15 +543,11 @@ span {
     flex-shrink: 0; 
 }
 
-/* .no-errors {
-    color: #4ec9b0;
-    padding: 10px;
-} */
+/* ── Scrollbar ── */
 
 ::-webkit-scrollbar {
     width: 5px;
     height: 5px;
-    z-index: 20;
 }
 
 ::-webkit-scrollbar-track {
@@ -405,7 +563,7 @@ span {
     background: #4e4e4e71;
 }
 
-/* --- responsiveness (for diff screens) --- */
+/* ── Responsive ── */
 
 @media (max-width: 1024px) {
     .container {
@@ -430,9 +588,17 @@ span {
 
 @media (max-width: 600px) {
     h1 {
-        font-size: 28px;
+        font-size: 11px;
     }
-    
+
+    .file-btn span {
+        display: none;
+    }
+
+    .header-divider {
+        display: none;
+    }
+
     .editor-section {
         height: 45vh;   
     }
@@ -455,13 +621,12 @@ span {
     }
 
     .run-button {
-        padding: 5px 8px; 
-        font-size: 0; 
+        padding: 5px 8px;
+        font-size: 0;
         width: auto;
-}
+    }
 
     .run-button .play-icon {
-        font-size: 16px;
-        margin-right: 0; 
+        font-size: 14px;
     }
 }
