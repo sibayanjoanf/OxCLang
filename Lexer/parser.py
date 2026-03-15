@@ -289,6 +289,7 @@ class Parser:
             return ASTNode('norm_dec_empty')
         else:
             self.error(f"Unexpected token: '{current}' | Expected '[' or '=' or ',' or terminator '~'")
+            return ASTNode('norm_dec_empty')
     
     # <norm_tail>
     # Production 11: <norm_tail> → , id <norm_dec> <norm_tail>
@@ -2337,55 +2338,55 @@ class Parser:
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='toRise', children=[param_item_node])
         elif current == 'toFall':
             self.match('toFall')
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='toFall', children=[param_item_node])
         elif current == 'horizon':
             self.match('horizon')
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='horizon', children=[param_item_node])
         elif current == 'sizeOf':
             self.match('sizeOf')
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='sizeOf', children=[param_item_node])
         elif current == 'toInt':
             self.match('toInt')
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='toInt', children=[param_item_node])
         elif current == 'toFloat':
             self.match('toFloat')
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='toFloat', children=[param_item_node])
         elif current == 'toString':
             self.match('toString')
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='toString', children=[param_item_node])
         elif current == 'toChar':
             self.match('toChar')
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='toChar', children=[param_item_node])
         elif current == 'toBool':
             self.match('toBool')
             self.match('(')
             param_item_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item_node])
+            return ASTNode('function_call', value='toBool', children=[param_item_node])
         elif current == 'waft':
             self.match('waft')
             self.match('(')
@@ -2393,7 +2394,7 @@ class Parser:
             self.match(',')
             param_item2_node = self.parse_param_item()
             self.match(')')
-            return ASTNode('function_call', children=[param_item1_node, param_item2_node])
+            return ASTNode('function_call', value='waft', children=[param_item1_node, param_item2_node])
         else:
             self.error(f"Unexpected token: '{current}' | Expected function call (toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft)'{current}'")
 

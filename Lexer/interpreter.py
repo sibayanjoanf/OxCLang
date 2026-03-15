@@ -66,6 +66,9 @@ class Interpreter:
         self._paused_stack: List[Tuple[Any, int]] = []  # (node, next_child_index)
         self._paused_after_inhale: bool = False
 
+        # current function name (set during _call_user_function) so return value can be normalized
+        self._current_function_name: Optional[str] = None
+
     # -------------------- Public API --------------------
 
     def run(self, ast) -> None:
@@ -92,11 +95,18 @@ class Interpreter:
         self.waiting_for_input = False
         self.input_request = None
 
-        # resume from paused point
+        # resume from paused point; process stack until we pause again or stack is empty
         self._paused_after_inhale = False
-        if self._paused_stack:
+        while self._paused_stack:
             node, child_i = self._paused_stack.pop()
-            self._exec(node, resume_child_index=child_i)
+            try:
+                self._exec(node, resume_child_index=child_i)
+            except BreakSignal:
+                pass  # resumed inside a loop body; break is valid, treat as done
+            except ContinueSignal:
+                pass  # resumed inside a loop body; continue is valid, treat as done
+            if self.waiting_for_input:
+                break
 
     # -------------------- Output helpers --------------------
 
@@ -115,18 +125,39 @@ class Interpreter:
         if len(self.scopes) > 1:
             self.scopes.pop()
 
+    def _scope_key(self, identifier: str) -> str:
+        """
+        Normalize identifier to the key used in scope. Use the actual name (lexeme)
+        so that the same variable name always maps to the same key regardless of
+        token type (e.g. id2 vs id8 for different occurrences of TAX_RATE).
+        """
+        if not identifier:
+            return identifier
+        id_map = getattr(self.semantic, "identifier_map", {}) or {}
+        # token_type -> lexeme; use lexeme as key so all refs to same name share one key
+        return id_map.get(identifier, identifier)
+
     def _lookup(self, identifier_token_type: str) -> Any:
+        key = self._scope_key(identifier_token_type)
         for scope in reversed(self.scopes):
-            if identifier_token_type in scope:
-                return scope[identifier_token_type]
-        return None
+            if key in scope:
+                return scope[key]
+        # key is the lexeme (actual name); use it for the error message
+        name = key if key else identifier_token_type
+        raise InterpreterError(f"Undefined variable '{name}'")
 
     def _assign(self, identifier_token_type: str, value: Any) -> None:
+        # Never store "naur"/"yuh" as-is; always store Python bool so conditions work
+        if value == "naur" or getattr(value, "value", None) == "naur":
+            value = False
+        elif value == "yuh" or getattr(value, "value", None) == "yuh":
+            value = True
+        key = self._scope_key(identifier_token_type)
         for scope in reversed(self.scopes):
-            if identifier_token_type in scope:
-                scope[identifier_token_type] = value
+            if key in scope:
+                scope[key] = value
                 return
-        self.scopes[-1][identifier_token_type] = value
+        self.scopes[-1][key] = value
 
     # -------------------- Core execution --------------------
 
@@ -195,32 +226,39 @@ class Interpreter:
             return []
         params: List[Tuple[str, str]] = []
         # params: [data_type, identifier, params_dim, params_tail]
+        # params_tail (next param): [data_type, identifier, params_dim, params_tail] — same shape
         cur = params_node
-        while cur and getattr(cur, "type", None) == "params":
+        while cur and getattr(cur, "type", None) in ("params", "params_tail"):
             dt = cur.children[0].value
             pid = cur.children[1].value
             params.append((pid, dt))
             tail = cur.children[3]
             if getattr(tail, "type", None) == "params_tail_empty":
                 break
-            # params_tail: [data_type, identifier, params_dim, params_tail]
             cur = tail
         return params
 
     # -------------------- Statements --------------------
 
     def _exec_program(self, node, resume_child_index: int = 0) -> Any:
-        # run globals + subfunctions (already indexed) + atmosphere body
+        # run globals, then atmosphere body only (sub_functions are indexed, not executed)
         for i in range(resume_child_index, len(node.children)):
             child = node.children[i]
-            if getattr(child, "type", None) == "body":
+            t = getattr(child, "type", None)
+            if t == "body":
                 self.push_scope()
                 try:
                     self._exec(child)
                 finally:
-                    self.pop_scope()
-            else:
+                    # Do not pop when pausing for input: variables (e.g. password, correct)
+                    # live in this scope; resume must see them.
+                    if not self.waiting_for_input:
+                        self.pop_scope()
+            elif t == "global_dec":
                 self._exec(child)
+            elif t in ("sub_functions", "sub_functions_empty"):
+                pass
+            # else: skip (e.g. sub_functions already handled)
             if self.waiting_for_input:
                 return None
         return None
@@ -239,10 +277,7 @@ class Interpreter:
             child = node.children[i]
             self._exec(child)
             if self.waiting_for_input:
-                # Only set the resume point for the *innermost* stmt_list.
-                # Outer stmt_lists (and program/body) should not overwrite it.
-                if not self._paused_stack:
-                    self._paused_stack = [(node, i + 1)]
+                self._paused_stack.append((node, i + 1))
                 return None
         return None
 
@@ -260,22 +295,71 @@ class Interpreter:
         self._declare_tail(node.children[3], data_type)
         return None
 
-    def _declare_tail(self, norm_tail_node, data_type: str) -> None:
-        if getattr(norm_tail_node, "type", None) == "norm_tail_empty":
+    def _exec_constant(self, node, resume_child_index: int = 0) -> Any:
+        # wind <constant>: constant node children = [data_type, id_no, const_dec]
+        if not getattr(node, "children", None) or len(node.children) < 3:
+            return None
+        data_type = node.children[0].value
+        id_no = node.children[1].value
+        const_dec = node.children[2]
+        self._exec_const_dec_one(data_type, id_no, const_dec)
+        if getattr(const_dec, "children", None) and len(const_dec.children) >= 3:
+            tail = const_dec.children[2]
+            if tail and getattr(tail, "type", None) != "const_tail_empty":
+                self._exec_const_tail(data_type, tail)
+        return None
+
+    def _exec_const_dec_one(self, data_type: str, id_no: str, const_dec) -> None:
+        # const_dec: [operator '=', literal_node, const_tail] or [row_size, ...] for array
+        if not getattr(const_dec, "children", None) or len(const_dec.children) < 2:
+            self._assign(id_no, self._default_value(data_type))
             return
-        # norm_tail: [identifier, norm_dec, norm_tail]
+        first = const_dec.children[0]
+        if getattr(first, "type", None) == "operator" and getattr(first, "value", None) == "=":
+            literal_node = const_dec.children[1]
+            val = self._eval_literal_as_value(literal_node)
+            self._assign(id_no, self._coerce_to(data_type, val))
+            return
+        if getattr(first, "type", None) == "row_size":
+            self._assign(id_no, [])
+            return
+        self._assign(id_no, self._default_value(data_type))
+
+    def _exec_const_tail(self, data_type: str, const_tail_node) -> None:
+        # const_tail: [id_no, const_dec]
+        if not const_tail_node or getattr(const_tail_node, "type", None) == "const_tail_empty":
+            return
+        if not getattr(const_tail_node, "children", None) or len(const_tail_node.children) < 2:
+            return
+        id_no = const_tail_node.children[0].value
+        const_dec = const_tail_node.children[1]
+        self._exec_const_dec_one(data_type, id_no, const_dec)
+        if getattr(const_dec, "children", None) and len(const_dec.children) >= 3:
+            tail = const_dec.children[2]
+            if tail and getattr(tail, "type", None) != "const_tail_empty":
+                self._exec_const_tail(data_type, tail)
+
+    def _declare_tail(self, norm_tail_node, data_type: str) -> None:
+        # Same as working interpreter branch: [identifier, norm_dec, norm_tail]
+        if norm_tail_node is None or getattr(norm_tail_node, "type", None) == "norm_tail_empty":
+            return
         cur = norm_tail_node
         while cur and getattr(cur, "type", None) == "norm_tail":
-            vid = cur.children[0].value
+            if not getattr(cur, "children", None) or len(cur.children) < 2:
+                break
+            first = cur.children[0]
+            vid = getattr(first, "value", None) if first is not None else None
+            if vid is None:
+                break
             self._declare_one(vid, data_type, cur.children[1])
-            cur = cur.children[2]
+            cur = cur.children[2] if len(cur.children) > 2 else None
 
     def _declare_one(self, identifier_token_type: str, data_type: str, norm_dec_node) -> None:
-        # norm_dec: row_size/array OR '=' expr OR empty
-        if getattr(norm_dec_node, "type", None) == "norm_dec_empty":
+        # norm_dec: row_size/array OR '=' expr OR empty (None when parser hit error)
+        if norm_dec_node is None or getattr(norm_dec_node, "type", None) == "norm_dec_empty":
             self._assign(identifier_token_type, self._default_value(data_type))
             return
-        if norm_dec_node.type == "norm_dec" and norm_dec_node.children:
+        if getattr(norm_dec_node, "type", None) == "norm_dec" and norm_dec_node.children:
             first = norm_dec_node.children[0]
             if getattr(first, "type", None) == "operator" and first.value == "=":
                 expr = norm_dec_node.children[1]
@@ -322,10 +406,11 @@ class Interpreter:
         expr_node = assignment_node.children[1]
         op = op_node.children[0].value  # operator node value
         rhs = self._eval_expr(expr_node)
-        cur = self._lookup(vid)
         if op == "=":
             self._assign(vid, rhs)
-        elif op == "+=":
+            return None
+        cur = self._lookup(vid)
+        if op == "+=":
             self._assign(vid, (cur if cur is not None else 0) + rhs)
         elif op == "-=":
             self._assign(vid, (cur if cur is not None else 0) - rhs)
@@ -334,32 +419,77 @@ class Interpreter:
         elif op == "/=":
             if rhs == 0:
                 raise InterpreterError("Division by zero")
-            self._assign(vid, (cur if cur is not None else 0) / rhs)
+            cur_val = cur if cur is not None else 0
+            if isinstance(cur_val, int) and isinstance(rhs, int):
+                self._assign(vid, cur_val // rhs)
+            else:
+                self._assign(vid, cur_val / rhs)
         elif op == "%=":
             if rhs == 0:
                 raise InterpreterError("Modulo by zero")
-            self._assign(vid, (cur if cur is not None else 0) % rhs)
+            if isinstance(rhs, float):
+                raise InterpreterError("Modulo operator requires integer operands")
+            cur_val = cur if cur is not None else 0
+            self._assign(vid, cur_val % rhs)
         return None
 
     def _exec_input_output(self, node, resume_child_index: int = 0) -> Any:
         # children: ['inhale', id, id_access] OR ['exhale', output]
+        if not getattr(node, "children", None) or len(node.children) < 2:
+            return None
         kind = node.children[0]
         if kind == "inhale":
-            vid = node.children[1].value
-            # request input
+            id_node = node.children[1]
+            vid = getattr(id_node, "value", None)
+            if vid is None:
+                return None
             self.waiting_for_input = True
             self.input_request = InputRequest(target_identifier=vid, prompt="")
             return None
         if kind == "exhale":
             out_node = node.children[1]
-            text = self._eval_output(out_node)
-            # Behave like C printf: no automatic newline; rely on \n in the string
-            self.emit(str(text))
+            try:
+                text = self._eval_output(out_node)
+            except Exception:
+                text = ""
+            self.emit("" if text is None else str(text))
             return None
         return None
 
     def _exec_conditioner(self, node, resume_child_index: int = 0) -> Any:
         return self._exec_generic(node, resume_child_index=resume_child_index)
+
+    def _exec_switch_stat(self, node, resume_child_index: int = 0) -> Any:
+        # switch_stat: [id_no, id_access_node, switch_cases_node, switch_def_node]
+        id_no, id_access_node, switch_cases_node, switch_def_node = node.children[0], node.children[1], node.children[2], node.children[3]
+        switch_val = self._lookup(id_no.value)
+        matched = False
+        cur = switch_cases_node
+        while cur and getattr(cur, "type", None) == "switch_cases":
+            case_const = cur.children[0].value
+            stmt_list = cur.children[1]
+            # Normalize: lexer may give int_lit as string
+            try:
+                if isinstance(case_const, str) and case_const.lstrip('-').isdigit():
+                    case_const = int(case_const)
+            except (ValueError, TypeError):
+                pass
+            if switch_val == case_const:
+                matched = True
+                self.push_scope()
+                try:
+                    self._exec(stmt_list)
+                finally:
+                    self.pop_scope()
+                break
+            cur = cur.children[2]
+        if not matched and getattr(switch_def_node, "type", None) == "switch_def" and getattr(switch_def_node, "children", None):
+            self.push_scope()
+            try:
+                self._exec(switch_def_node.children[0])
+            finally:
+                self.pop_scope()
+        return None
 
     def _exec_if_stat(self, node, resume_child_index: int = 0) -> Any:
         cond = node.children[0]
@@ -450,13 +580,31 @@ class Interpreter:
 
         # while-loop form
         cond, body = node.children
+        # resume_child_index=1: one more iteration (re-eval condition, run body); used when resuming after inhale
+        if resume_child_index == 1:
+            if not self._eval_cond(cond):
+                return None
+            self.push_scope()
+            try:
+                self._paused_stack.append((node, 1))
+                self._exec(body)
+            finally:
+                if not self.waiting_for_input:
+                    self.pop_scope()
+                    if self._paused_stack and self._paused_stack[-1][0] is node and self._paused_stack[-1][1] == 1:
+                        self._paused_stack.pop()
+            return None
         while self._eval_cond(cond):
             try:
                 self.push_scope()
                 try:
+                    self._paused_stack.append((node, 1))
                     self._exec(body)
                 finally:
-                    self.pop_scope()
+                    if not self.waiting_for_input:
+                        self.pop_scope()
+                        if self._paused_stack and self._paused_stack[-1][0] is node and self._paused_stack[-1][1] == 1:
+                            self._paused_stack.pop()
             except BreakSignal:
                 break
             except ContinueSignal:
@@ -469,19 +617,40 @@ class Interpreter:
         # forms:
         # - [id, id_access, for_vals]
         # - [data_type, id, for_vals]
+        # for_vals can be literal (node.value) or id<id_access> (node.children = [id_no, id_access_node])
+        for_vals_node = node.children[2]
+        if getattr(for_vals_node, "children", None) and len(for_vals_node.children) >= 1:
+            # id<id_access> form: evaluate the variable
+            vid_for = for_vals_node.children[0].value
+            val = self._lookup(vid_for)
+            if val is None:
+                raise InterpreterError("Undefined variable in for loop initial value")
+        else:
+            val = self._literal_to_value(getattr(for_vals_node, "value", None))
         if getattr(node.children[0], "type", None) == "data_type":
             dt = node.children[0].value
             vid = node.children[1].value
-            v = node.children[2].value
-            self._assign(vid, self._coerce_to(dt, self._literal_to_value(v)))
+            self._assign(vid, self._coerce_to(dt, val))
             return None
         vid = node.children[0].value
-        v = node.children[2].value
-        self._assign(vid, self._literal_to_value(v))
+        self._assign(vid, val)
         return None
 
     def _exec_stmt_ctrl(self, node, resume_child_index: int = 0) -> Any:
-        return self._exec_generic(node, resume_child_index=resume_child_index)
+        """
+        Same as stmt_list: iterate children and set resume point when inhale
+        triggers waiting_for_input, so execution continues after the inhale (e.g.
+        if/else in a cycle body) when the user provides input.
+        """
+        if not getattr(node, "children", None):
+            return None
+        for i in range(resume_child_index, len(node.children)):
+            child = node.children[i]
+            self._exec(child)
+            if self.waiting_for_input:
+                self._paused_stack.append((node, i + 1))
+                return None
+        return None
 
     def _exec_ctrl_flow(self, node, resume_child_index: int = 0) -> Any:
         v = getattr(node, "value", None)
@@ -492,8 +661,24 @@ class Interpreter:
         # return_stat is nested in ctrl_flow via statement production
         return self._exec_generic(node, resume_child_index=resume_child_index)
 
+    def _exec_return_stat_node(self, node, resume_child_index: int = 0) -> Any:
+        """Parser wraps gasp in return_stat_node; single child is return_stat. Ensure we run it."""
+        if getattr(node, "children", None) and len(node.children) > 0:
+            return self._exec(node.children[0], resume_child_index=resume_child_index)
+        return None
+
     def _exec_return_stat(self, node, resume_child_index: int = 0) -> Any:
         val = self._eval_expr(node.children[0])
+        # Force naur/yuh to Python bool (handles string, token, or any wrapper)
+        if val == "naur" or getattr(val, "value", None) == "naur":
+            val = False
+        elif val == "yuh" or getattr(val, "value", None) == "yuh":
+            val = True
+        # Normalize by declared return type so ReturnSignal always carries the right type
+        if self._current_function_name:
+            declared = self.function_return_type.get(self._current_function_name)
+            if declared == "bool":
+                val = self._coerce_to("bool", val)
         raise ReturnSignal(val)
 
     # -------------------- Function calls --------------------
@@ -515,6 +700,7 @@ class Interpreter:
         body = func_node.children[3]
         return_stat = func_node.children[4]
 
+        self._current_function_name = func_name
         self.push_scope()
         try:
             for (pid, ptype), aval in zip(params, args):
@@ -522,13 +708,27 @@ class Interpreter:
             try:
                 self._exec(body)
                 # explicit return statement node exists; execute it to return value or nothing
-                if getattr(return_stat, "type", None) == "return_stat":
-                    self._exec(return_stat)
+                rt = getattr(return_stat, "type", None)
+                if rt == "return_stat" or (
+                    getattr(return_stat, "children", None) and len(return_stat.children) > 0
+                ):
+                    try:
+                        self._exec(return_stat)
+                    except ReturnSignal as r:
+                        return self._normalize_return(r.value, func_name)
                 return None
             except ReturnSignal as r:
-                return r.value
+                return self._normalize_return(r.value, func_name)
         finally:
+            self._current_function_name = None
             self.pop_scope()
+
+    def _normalize_return(self, value: Any, func_name: str) -> Any:
+        """Ensure function return value matches declared type (e.g. bool -> Python True/False)."""
+        declared = self.function_return_type.get(func_name)
+        if declared == "bool":
+            return self._coerce_to("bool", value)
+        return value
 
     # -------------------- Expressions --------------------
 
@@ -548,6 +748,25 @@ class Interpreter:
 
     def _eval_cond(self, cond_stat_node) -> bool:
         v = self._eval_expr(cond_stat_node.children[0])
+        return self._to_bool(v)
+
+    def _to_bool(self, v: Any) -> bool:
+        """Convert OxC value to Python bool; treat 'naur' and token-with-naur as False."""
+        if v is None:
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            if v == "" or v == "naur":
+                return False
+            if v == "yuh":
+                return True
+        if hasattr(v, "value"):
+            x = getattr(v, "value", None)
+            if x == "naur":
+                return False
+            if x == "yuh":
+                return True
         return bool(v)
 
     def _eval_expr(self, expr_node) -> Any:
@@ -562,9 +781,10 @@ class Interpreter:
     def _eval_or_tail(self, left, node) -> Any:
         if node.type == "or_tail_empty":
             return left
+        if bool(left):
+            return left
         right = self._eval_and(node.children[0])
-        result = bool(left) or bool(right)
-        return self._eval_or_tail(result, node.children[1])
+        return self._eval_or_tail(bool(left) or bool(right), node.children[1])
 
     def _eval_and(self, node) -> Any:
         if node.type == "and_expr":
@@ -575,9 +795,10 @@ class Interpreter:
     def _eval_and_tail(self, left, node) -> Any:
         if node.type == "and_tail_empty":
             return left
+        if not bool(left):
+            return left
         right = self._eval_rela(node.children[0])
-        result = bool(left) and bool(right)
-        return self._eval_and_tail(result, node.children[1])
+        return self._eval_and_tail(bool(left) and bool(right), node.children[1])
 
     def _eval_rela(self, node) -> Any:
         if node.type == "rela_expr":
@@ -587,6 +808,14 @@ class Interpreter:
                 return left
             op = tail.children[0].children[0].value
             right = self._eval_arith(tail.children[1])
+            # For ordering operators, coerce to numbers so loop conditions like i <= height work
+            # even if height was stored as a string (e.g. from input).
+            if op in ("<", "<=", ">", ">="):
+                try:
+                    left = self._to_arith_value(left)
+                    right = self._to_arith_value(right)
+                except InterpreterError:
+                    pass  # fall back to raw comparison
             if op == "==":
                 return left == right
             if op == "!=":
@@ -607,11 +836,30 @@ class Interpreter:
             return self._eval_arith_tail(left, node.children[1])
         return self._eval_generic_expr(node)
 
+    def _to_arith_value(self, value: Any) -> Any:
+        """Coerce value to int or float for arithmetic. Prevents + from doing string concatenation."""
+        if value is None:
+            return 0
+        if isinstance(value, bool):
+            return 1 if value else 0
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str):
+            try:
+                if "." in value:
+                    return float(value)
+                return int(value)
+            except (ValueError, TypeError):
+                raise InterpreterError(f"Arithmetic requires numeric operands, got string: {value!r}")
+        raise InterpreterError(f"Arithmetic requires numeric operands, got {type(value).__name__}")
+
     def _eval_arith_tail(self, left, node) -> Any:
         if node.type == "arith_tail_empty":
             return left
         op = node.children[0].children[0].value
         right = self._eval_term(node.children[1])
+        left = self._to_arith_value(left)
+        right = self._to_arith_value(right)
         if op == "+":
             left = left + right
         else:
@@ -629,15 +877,22 @@ class Interpreter:
             return left
         op = node.children[0].children[0].value
         right = self._eval_factor(node.children[1])
+        left = self._to_arith_value(left)
+        right = self._to_arith_value(right)
         if op == "*":
             left = left * right
         elif op == "/":
             if right == 0:
                 raise InterpreterError("Division by zero")
-            left = left / right
+            if isinstance(left, int) and isinstance(right, int):
+                left = left // right
+            else:
+                left = left / right
         elif op == "%":
             if right == 0:
                 raise InterpreterError("Modulo by zero")
+            if isinstance(left, float) or isinstance(right, float):
+                raise InterpreterError("Modulo operator requires integer operands")
             left = left % right
         return self._eval_term_tail(left, node.children[2])
 
@@ -653,9 +908,18 @@ class Interpreter:
             v = self._eval_negate(node.children[0])
             return -v
         if node.children and getattr(node.children[0], "type", None) == "output":
+            out_node = node.children[0]
+            # In expression context we need the value (e.g. bool for conditions), not the string for exhale.
+            if getattr(out_node, "children", None) and len(out_node.children) == 1:
+                lit = out_node.children[0]
+                if getattr(lit, "type", None) == "literal":
+                    return self._eval_literal_as_value(lit)
             return self._eval_output(node.children[0])
         if node.children and getattr(node.children[0], "type", None) == "logic_expr":
             return not bool(self._eval_logic(node.children[0]))
+        # In expression context, literal must yield value (int/float/bool), not string.
+        if node.children and getattr(node.children[0], "type", None) == "literal":
+            return self._eval_literal_as_value(node.children[0])
         return self._eval_generic_expr(node)
 
     def _eval_negate(self, node) -> Any:
@@ -666,30 +930,105 @@ class Interpreter:
         return self._lookup(vid)
 
     def _eval_output(self, node) -> Any:
-        # output -> identifier | function_call | literal
+        # output -> literal (parser wraps in literal); literal may contain value or output_concat+output_tail
+        if not getattr(node, "children", None) or len(node.children) == 0:
+            return ""
         child = node.children[0]
-        if child.type == "identifier":
+        ctype = getattr(child, "type", None)
+        if ctype == "identifier":
             return self._eval_identifier(child)
-        if child.type == "function_call":
-            # predefined builtins only for now are handled by semantic;
-            # user funcs are id_tail calls in identifier.
-            return None
-        if child.type == "literal":
+        if ctype == "function_call":
+            return self._eval_function_call(child)
+        if ctype == "literal":
             return self._eval_literal(child)
-        return None
+        # Nested "output" from parse_output_concat (e.g. exhale(x) produces output->literal with concat = output->identifier)
+        if ctype == "output" and getattr(child, "children", None) and len(child.children) == 1:
+            return self._eval_output(child)
+        return ""
 
     def _eval_literal(self, node) -> Any:
         # literal -> value OR output_concat + output_tail (string/char concatenation)
+        if not getattr(node, "children", None) or len(node.children) == 0:
+            return ""
         c0 = node.children[0]
-        if c0.type == "value":
-            return self._literal_to_value(c0.value)
+        if getattr(c0, "type", None) == "value":
+            return self._literal_to_value(getattr(c0, "value", None))
         # concat form: treat everything as string and join
         parts: List[str] = []
         self._collect_output_concat(node, parts)
         return "".join(parts)
 
+    def _eval_literal_as_value(self, node) -> Any:
+        """Evaluate literal in expression context: return actual value (int/float/bool), not string."""
+        if not getattr(node, "children", None) or len(node.children) == 0:
+            return None
+        c0 = node.children[0]
+        if getattr(c0, "type", None) == "value":
+            return self._literal_to_value(c0.value)
+        if len(node.children) >= 2:
+            concat_node, tail_node = node.children[0], node.children[1]
+            tail_empty = getattr(tail_node, "type", None) in ("output_tail_empty", None) or not getattr(tail_node, "children", None)
+            if tail_empty and getattr(concat_node, "type", None) == "output" and getattr(concat_node, "children", None) and len(concat_node.children) == 1:
+                single = concat_node.children[0]
+                if getattr(single, "type", None) == "identifier":
+                    return self._eval_identifier(single)
+                if getattr(single, "type", None) == "function_call":
+                    return self._eval_function_call(single)
+        return self._eval_literal(node)
+
     def _collect_output_concat(self, node, parts: List[str]) -> None:
-        if node is None or not getattr(node, "children", None):
+        if node is None:
+            return
+        # Nested "output" from parse_output_concat (e.g. id or function_call in exhale)
+        if getattr(node, "type", None) == "output" and getattr(node, "children", None) and len(node.children) == 1:
+            self._collect_output_concat(node.children[0], parts)
+            return
+        # Single identifier or function_call wrapped in "output" (from parse_output_concat for id)
+        if getattr(node, "type", None) == "identifier":
+            v = self._eval_identifier(node)
+            parts.append("" if v is None else str(v))
+            return
+        if getattr(node, "type", None) == "function_call":
+            v = self._eval_function_call(node)
+            parts.append("" if v is None else str(v))
+            return
+        if not getattr(node, "children", None):
+            return
+        # literal has [output_concat, output_tail]
+        if getattr(node, "type", None) == "literal" and len(node.children) >= 2:
+            concat_node = node.children[0]
+            tail_node = node.children[1]
+            if getattr(concat_node, "type", None) == "output_content":
+                parts.append(str(self._literal_to_value(concat_node.value)))
+            elif getattr(concat_node, "type", None) == "value":
+                parts.append(str(self._literal_to_value(concat_node.value)))
+            elif getattr(concat_node, "type", None) == "identifier":
+                v = self._eval_identifier(concat_node)
+                parts.append("" if v is None else str(v))
+            elif getattr(concat_node, "type", None) == "function_call":
+                v = self._eval_function_call(concat_node)
+                parts.append("" if v is None else str(v))
+            else:
+                self._collect_output_concat(concat_node, parts)
+            if getattr(tail_node, "type", None) == "output_tail" and getattr(tail_node, "children", None) and len(tail_node.children) >= 2:
+                self._collect_output_concat(tail_node, parts)
+            return
+        if getattr(node, "type", None) == "output_tail" and getattr(node, "children", None) and len(node.children) >= 2:
+            concat_node = node.children[0]
+            tail_node = node.children[1]
+            if getattr(concat_node, "type", None) == "output_content":
+                parts.append(str(self._literal_to_value(concat_node.value)))
+            elif getattr(concat_node, "type", None) == "value":
+                parts.append(str(self._literal_to_value(concat_node.value)))
+            elif getattr(concat_node, "type", None) == "identifier":
+                v = self._eval_identifier(concat_node)
+                parts.append("" if v is None else str(v))
+            elif getattr(concat_node, "type", None) == "function_call":
+                v = self._eval_function_call(concat_node)
+                parts.append("" if v is None else str(v))
+            else:
+                self._collect_output_concat(concat_node, parts)
+            self._collect_output_concat(tail_node, parts)
             return
         for ch in node.children:
             if getattr(ch, "type", None) == "output_content":
@@ -717,8 +1056,108 @@ class Interpreter:
         # plain variable reference
         return self._lookup(id_no)
 
+    def _eval_function_call(self, node) -> Any:
+        """Evaluate predefined built-in: toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft."""
+        name = getattr(node, "value", None)
+        if not name or not getattr(node, "children", None):
+            return None
+        children = node.children
+
+        def get_arg(i: int):
+            # param_item -> expr wrapper; param_item has one child which is the expr node
+            item = children[i]
+            if getattr(item, "type", None) == "param_item" and getattr(item, "children", None):
+                return self._eval_expr(item.children[0])
+            return self._eval_expr(item) if item else None
+
+        if name == "toRise":
+            v = get_arg(0)
+            if v is None:
+                return None
+            s = str(v) if not isinstance(v, str) else v
+            return s.upper()
+        if name == "toFall":
+            v = get_arg(0)
+            if v is None:
+                return None
+            s = str(v) if not isinstance(v, str) else v
+            return s.lower()
+        if name == "horizon":
+            v = get_arg(0)
+            if v is None:
+                return 0
+            if isinstance(v, str):
+                return len(v)
+            if isinstance(v, (int, float)):
+                # float: exclude decimal point (e.g. 234.34 -> 5)
+                s = str(v).replace(".", "")
+                return len(s)
+            return 0
+        if name == "sizeOf":
+            v = get_arg(0)
+            if v is None:
+                return 0
+            if isinstance(v, list):
+                return len(v)
+            if isinstance(v, dict):
+                return len(v)
+            return 0
+        if name == "toInt":
+            v = get_arg(0)
+            if v is None or v == "":
+                return 0
+            try:
+                return int(float(str(v)))
+            except (ValueError, TypeError):
+                raise InterpreterError(f"toInt: cannot convert '{v}' to int")
+        if name == "toFloat":
+            v = get_arg(0)
+            if v is None or v == "":
+                return 0.0
+            try:
+                return float(str(v))
+            except (ValueError, TypeError):
+                raise InterpreterError(f"toFloat: cannot convert '{v}' to float")
+        if name == "toString":
+            v = get_arg(0)
+            if v is None:
+                return ""
+            if isinstance(v, bool):
+                return "yuh" if v else "naur"
+            return str(v)
+        if name == "toChar":
+            v = get_arg(0)
+            if v is None:
+                return None
+            if isinstance(v, str) and len(v) == 1:
+                return v
+            if isinstance(v, str) and len(v) > 0:
+                return v[0]
+            try:
+                return chr(int(v))
+            except (ValueError, TypeError):
+                raise InterpreterError(f"toChar: cannot convert '{v}' to char")
+        if name == "toBool":
+            v = get_arg(0)
+            if v is None:
+                return False
+            if v == "" or v == 0 or v == 0.0:
+                return False
+            return True
+        if name == "waft":
+            v1, v2 = get_arg(0), get_arg(1)
+            try:
+                f = float(v1)
+                n = int(v2)
+            except (ValueError, TypeError):
+                raise InterpreterError(f"waft: expected (float, int), got ({v1}, {v2})")
+            return round(f, n)
+        return None
+
     def _eval_generic_expr(self, node) -> Any:
         # wrapper nodes: delegate to first meaningful child
+        if node.type == "function_call":
+            return self._eval_function_call(node)
         if not getattr(node, "children", None):
             if node.type == "value":
                 return self._literal_to_value(node.value)
@@ -738,19 +1177,53 @@ class Interpreter:
         self._assign(vid, new)
         return new if prefix else cur
 
+    def _unescape_string(self, s: str) -> str:
+        """Expand common escape sequences so \\n, \\t, etc. work reliably (including leading \\n)."""
+        if not s:
+            return s
+        out = []
+        i = 0
+        while i < len(s):
+            if s[i] == "\\" and i + 1 < len(s):
+                c = s[i + 1]
+                if c == "n":
+                    out.append("\n")
+                elif c == "t":
+                    out.append("\t")
+                elif c == "r":
+                    out.append("\r")
+                elif c == "\\":
+                    out.append("\\")
+                elif c == '"':
+                    out.append('"')
+                elif c == "'":
+                    out.append("'")
+                else:
+                    out.append(s[i : i + 2])
+                i += 2
+            else:
+                out.append(s[i])
+                i += 1
+        return "".join(out)
+
     def _literal_to_value(self, raw) -> Any:
+        # If a token object slipped in (e.g. from AST), use its .value
+        if raw is not None and hasattr(raw, "value") and not isinstance(raw, str):
+            raw = getattr(raw, "value", raw)
         if raw == "yuh":
             return True
         if raw == "naur":
             return False
         if isinstance(raw, str):
             if raw.startswith('"') and raw.endswith('"'):
-                inner = raw[1:-1].encode("utf-8").decode("unicode_escape")
+                inner = self._unescape_string(raw[1:-1])
                 return self._interpolate_string(inner)
             if raw.startswith("'") and raw.endswith("'"):
                 inner = raw[1:-1]
                 return inner if inner != "" else None
         # number parsing
+        if raw is None or (isinstance(raw, str) and raw == ""):
+            return 0
         try:
             if isinstance(raw, str) and "." in raw:
                 return float(raw)
@@ -802,8 +1275,13 @@ class Interpreter:
                 return 1 if value else 0
             if isinstance(value, float):
                 return int(value)
-            if value is None:
+            if value is None or value == "":
                 return 0
+            if isinstance(value, str):
+                try:
+                    return int(float(value))
+                except (ValueError, TypeError):
+                    raise InterpreterError(f"Cannot convert '{value}' to int")
             return int(value)
         if data_type == "float":
             if isinstance(value, bool):
@@ -817,7 +1295,18 @@ class Interpreter:
             if value is None:
                 return False
             if isinstance(value, str):
+                if value == "" or value == "naur":
+                    return False
+                if value == "yuh":
+                    return True
                 return False if value == "" else True
+            # Token or other object with .value (e.g. "naur"/"yuh" from AST)
+            if hasattr(value, "value"):
+                v = getattr(value, "value", None)
+                if v == "naur":
+                    return False
+                if v == "yuh":
+                    return True
             return bool(value)
         if data_type == "char":
             if value is None:

@@ -93,8 +93,8 @@ def parse():
 
 @app.route('/run', methods=['POST'])
 def run_code():
-    data = request.get_json()
-    source_code = data.get('code', '')
+    data = request.get_json(silent=True) or {}
+    source_code = data.get('code', '') or ''
 
     lexer = Lexer(source_code)
     tokens = lexer.tokenize()
@@ -160,9 +160,14 @@ def run_code():
 
     _SESSIONS[session_id] = interp
 
+    output_list = getattr(interp, 'output', None)
+    if not isinstance(output_list, list):
+        output_list = []
+    output_str = ''.join(str(p) for p in output_list)
+
     term = {
         'session_id': session_id,
-        'output': ''.join(interp.output),
+        'output': output_str,
         'waiting_for_input': bool(interp.waiting_for_input),
         'prompt': interp.input_request.prompt if interp.input_request else '',
         'runtime_errors': runtime_errors,

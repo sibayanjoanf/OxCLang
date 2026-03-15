@@ -79,13 +79,15 @@
                     <button class="tab" id="outputTab">Output</button>
                 </div>
             </div>
-            <div class="col-labels" id="colLabels">
-                <span>LEXEME</span>
-                <span>TOKEN</span>
+            <div id="lexerPanel" class="tab-content-panel">
+                <div class="col-labels" id="colLabels">
+                    <span>LEXEME</span>
+                    <span>TOKEN</span>
+                </div>
+                <div id="tokenOutput"></div>
             </div>
-            <div id="tokenOutput"></div>
-            <div id="terminalWrapper" style="display:none;">
-                <pre id="terminalOutput" class="terminal-output"></pre>
+            <div id="runOutputPanel" class="tab-content-panel run-output-panel" style="display:none;">
+                <pre id="runOutput" class="terminal-output" aria-label="Program output"></pre>
             </div>
         </div>
     </div>
@@ -96,7 +98,7 @@
         const lineNumbers = document.getElementById('lineNumbers');
         const tokenOutput = document.getElementById('tokenOutput');
         const errorOutput = document.getElementById('errorOutput');
-        const terminalOutput = document.getElementById('terminalOutput');
+        function getRunOutputEl() { return document.getElementById('runOutput'); }
         // const terminalInputRow = document.getElementById('terminalInputRow');
         // const terminalPrompt = document.getElementById('terminalPrompt');
         // const terminalInput = document.getElementById('terminalInput');
@@ -109,7 +111,8 @@
         const lexerTab = document.getElementById('lexerTab');
         const outputTab = document.getElementById('outputTab');
         const colLabels = document.getElementById('colLabels');
-        const terminalWrapper = document.getElementById('terminalWrapper');
+        const lexerPanel = document.getElementById('lexerPanel');
+        const runOutputPanel = document.getElementById('runOutputPanel');
 
         const filenameInput = document.getElementById('filenameInput');
 
@@ -187,15 +190,17 @@
             if (tab === 'output') {
                 outputTab.classList.add('active');
                 lexerTab.classList.remove('active');
-                tokenOutput.style.display = 'none';
-                colLabels.style.display = 'none';
-                terminalWrapper.style.display = 'flex';
+                if (lexerPanel) lexerPanel.style.display = 'none';
+                if (runOutputPanel) runOutputPanel.style.display = 'flex';
+                var outEl = getRunOutputEl();
+                if (outEl && !outEl.textContent.trim()) {
+                    outEl.textContent = 'No output yet. Click Run to execute.';
+                }
             } else {
                 lexerTab.classList.add('active');
                 outputTab.classList.remove('active');
-                tokenOutput.style.display = '';
-                colLabels.style.display = '';
-                terminalWrapper.style.display = 'none';
+                if (lexerPanel) lexerPanel.style.display = '';
+                if (runOutputPanel) runOutputPanel.style.display = 'none';
             }
         }
 
@@ -232,67 +237,73 @@
         }
 
         function resetTerminalUI() {
-            terminalOutput.innerHTML = '';
+            var el = getRunOutputEl();
+            if (el) el.innerHTML = '';
         }
 
         function renderCompileErrors(lexicalErrors, syntaxErrors, semanticErrors) {
             resetTerminalUI();
+            var out = getRunOutputEl();
+            if (!out) return;
+            var lines = [];
 
-            const lines = [];
-
-            (lexicalErrors || []).forEach((e) => {
-                lines.push(`<span class="error-color">Lexical Impostor: ${escapeHtml(e.value)} [Line ${e.line}, Col ${e.column}]</span>`);
+            (lexicalErrors || []).forEach(function(e) {
+                lines.push('<span class="error-color">Lexical Impostor: ' + escapeHtml(e.value) + ' [Line ' + e.line + ', Col ' + e.column + ']</span>');
             });
-            (syntaxErrors || []).forEach((e) => {
-                lines.push(`<span class="error-color">Syntactical Impostor: ${escapeHtml(e.message)}${e.line > 0 ? ` [Line ${e.line}, Col ${e.column}]` : ''}</span>`);
+            (syntaxErrors || []).forEach(function(e) {
+                lines.push('<span class="error-color">Syntactical Impostor: ' + escapeHtml(e.message) + (e.line > 0 ? ' [Line ' + e.line + ', Col ' + e.column + ']' : '') + '</span>');
             });
-            (semanticErrors || []).forEach((e) => {
-                lines.push(`<span class="error-color">Semantic Impostor: ${escapeHtml(e.message)}${e.line > 0 ? ` [Line ${e.line}, Col ${e.column}]` : ''}</span>`);
+            (semanticErrors || []).forEach(function(e) {
+                lines.push('<span class="error-color">Semantic Impostor: ' + escapeHtml(e.message) + (e.line > 0 ? ' [Line ' + e.line + ', Col ' + e.column + ']' : '') + '</span>');
             });
 
             if (lines.length === 0) {
-                terminalOutput.textContent = 'No errors detected.\n';
+                out.textContent = 'No errors detected.\n';
                 return;
             }
-            terminalOutput.innerHTML = lines.join('\n') + '\n';
+            out.innerHTML = lines.join('\n') + '\n';
         }
 
         function renderTerminal(terminal) {
             resetTerminalUI();
+            var out = getRunOutputEl();
+            if (!out) return;
 
-            let output = terminal.output || '';
+            var output = (terminal && terminal.output !== undefined && terminal.output !== null) ? String(terminal.output) : '';
 
             if (terminal.runtime_errors && terminal.runtime_errors.length > 0) {
-                const errText = terminal.runtime_errors
-                    .map(e => `Runtime error: ${e.message}${e.line ? ` [Line ${e.line}, Col ${e.column}]` : ''}`)
-                    .join('\n');
+                var errText = terminal.runtime_errors.map(function(e) {
+                    return 'Runtime error: ' + e.message + (e.line ? ' [Line ' + e.line + ', Col ' + e.column + ']' : '');
+                }).join('\n');
                 output += (output.endsWith('\n') || output === '' ? '' : '\n') + errText + '\n';
             }
 
             if (terminal.waiting_for_input) {
                 output = output.replace(/\n$/, '');
-                terminalOutput.textContent = output;
+                out.textContent = output;
 
-                const promptSpan = document.createElement('span');
+                var promptSpan = document.createElement('span');
                 promptSpan.className = 'terminal-prompt';
                 promptSpan.textContent = terminal.prompt || '';
-                terminalOutput.appendChild(promptSpan);
+                out.appendChild(promptSpan);
 
-                const input = document.createElement('input');
+                var input = document.createElement('input');
                 input.id = 'terminalInput';
                 input.className = 'terminal-input';
                 input.type = 'text';
                 input.autocomplete = 'off';
                 input.spellcheck = false;
-                terminalOutput.appendChild(input);
+                out.appendChild(input);
                 input.focus();
 
                 input.addEventListener('keydown', handleTerminalInput);
             } else {
-                terminalOutput.textContent = output;
+                out.textContent = output === '' ? '(no output)' : output;
             }
 
-            terminalOutput.scrollTop = terminalOutput.scrollHeight;
+            out.scrollTop = out.scrollHeight;
+            if (runOutputPanel && runOutputPanel.scrollIntoView) runOutputPanel.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+            requestAnimationFrame(function() { out.scrollTop = out.scrollHeight; });
         }
 
         function handleTerminalInput(e) {
@@ -312,17 +323,19 @@
                 if (!data.success && data.error) {
                     terminalSessionId = null;
                     resetTerminalUI();
-                    terminalOutput.textContent = `${data.error}\n`;
+                    var o = getRunOutputEl();
+                    if (o) o.textContent = data.error + '\n';
                     return;
                 }
                 if (data.terminal) {
                     renderTerminal(data.terminal);
                 }
             })
-            .catch(err => {
+            .catch(function(err) {
                 console.error(err);
                 resetTerminalUI();
-                terminalOutput.textContent = 'Error connecting to server\n';
+                var o = getRunOutputEl();
+                if (o) o.textContent = 'Error connecting to server\n';
             });
         }
 
@@ -401,16 +414,23 @@
             })
             .catch(error => {
                 console.error('Error:', error);
-                resetTerminalUI();
-                terminalOutput.textContent = 'Error connecting to server\n';
+                // Do not overwrite Run output; terminal is for /run results only
             });
         }
 
         let terminalSessionId = null;
 
         function runProgram() {
+            var outEl = getRunOutputEl();
+            if (!outEl || !runOutputPanel) {
+                console.error('Output elements not found');
+                return;
+            }
             switchTab('output');
-            const code = codeInput.value;
+            outEl.textContent = 'Running…\n';
+            outEl.scrollTop = 0;
+            if (runOutputPanel.scrollIntoView) runOutputPanel.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+            var code = codeInput.value;
             
             fetch('/run', {
                 method: 'POST',
@@ -419,31 +439,47 @@
                 },
                 body: JSON.stringify({ code: code })
             })
-            .then(response => response.json())
-            .then(data => {
-                const lex = data.lexical_errors || [];
-                const syn = data.syntax_errors || [];
-                const sem = data.semantic_errors || [];
-
-                if (!data.success && (lex.length || syn.length || sem.length)) {
-                    terminalSessionId = null;
-                    renderCompileErrors(lex, syn, sem);
-                    return;
+            .then(function(response) {
+                if (!response.ok) {
+                    return response.text().then(function(body) {
+                        throw new Error('Server ' + response.status + ': ' + (body || response.statusText));
+                    });
                 }
-
-                if (data.terminal) {
-                    terminalSessionId = data.terminal.session_id;
-                    renderTerminal(data.terminal);
-                    return;
-                }
-
-                resetTerminalUI();
-                terminalOutput.textContent = 'No terminal data returned.\n';
+                return response.json();
             })
-            .catch(error => {
+            .then(function(data) {
+                try {
+                    const lex = data.lexical_errors || [];
+                    const syn = data.syntax_errors || [];
+                    const sem = data.semantic_errors || [];
+
+                    if (lex.length || syn.length || sem.length) {
+                        terminalSessionId = null;
+                        renderCompileErrors(lex, syn, sem);
+                        return;
+                    }
+
+                    if (data && data.terminal && typeof data.terminal === 'object') {
+                        terminalSessionId = data.terminal.session_id || null;
+                        renderTerminal(data.terminal);
+                        return;
+                    }
+
+                    resetTerminalUI();
+                    var noOut = getRunOutputEl();
+                    if (noOut) noOut.textContent = 'No output.\n';
+                } catch (err) {
+                    console.error(err);
+                    resetTerminalUI();
+                    var errEl = getRunOutputEl();
+                    if (errEl) errEl.textContent = 'Error displaying result: ' + (err.message || String(err)) + '\n';
+                }
+            })
+            .catch(function(error) {
                 console.error('Error:', error);
                 resetTerminalUI();
-                terminalOutput.textContent = 'Error connecting to server\n';
+                var errEl = getRunOutputEl();
+                if (errEl) errEl.textContent = 'Error connecting to server: ' + (error.message || String(error)) + '\n';
             });
         }
 
