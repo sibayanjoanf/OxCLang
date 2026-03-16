@@ -1,0 +1,21 @@
+atmosphere(){
+  int num, num2, sum, rev, digit~
+  exhale("Enter a number: ")~
+  inhale(num)~
+  
+  num2 = num~
+  cycle(num != 0){
+    digit = num % 10~
+    sum += digit~
+    num /= 10~
+  }
+
+  cycle(num2 != 0){
+    digit = num2 % 10~
+    rev = rev * 10 + digit~
+    num2 /= 10~
+  }
+
+  exhale("\nSum of digits = @{sum}")~
+  exhale("\nReverse: @{rev}")~
+}

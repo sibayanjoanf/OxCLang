@@ -1,0 +1,22 @@
+atmosphere(){
+
+    int a~
+    int b~
+
+    exhale("Enter first number: ")~
+    inhale(a)~
+
+    exhale("Enter second number: ")~
+    inhale(b)~
+
+    int sum = a + b~
+    int difference = a - b~
+    int product = a * b~
+    int quotient = a / b~
+
+    exhale("\nSum: @{sum}")~
+    exhale("\nDifference: @{difference}")~
+    exhale("\nProduct: @{product}")~
+    exhale("\nQuotient: @{quotient}")~
+
+}

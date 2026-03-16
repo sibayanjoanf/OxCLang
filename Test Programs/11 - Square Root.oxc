@@ -1,0 +1,17 @@
+atmosphere(){
+    float num~
+
+    exhale("Enter a number: ")~
+    inhale(num)~
+
+    float x = num, root~
+
+    echo(int i = 0~ i < 10~ i++~){
+        root = 0.5 * (x + (num / x))~
+        x = root~
+    }
+
+    float result = waft(root,6)~
+
+    exhale("Square root is @{result}")~
+}

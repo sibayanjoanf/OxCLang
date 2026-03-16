@@ -1,0 +1,83 @@
+air int binToDec(int bin){
+    int dec = 0~
+    int base = 1~
+    int digit~
+
+    cycle(bin > 0){
+        digit = bin % 10~
+        dec = dec + (digit * base)~
+        base *= 2~
+        bin = bin / 10~
+    }
+
+    gasp dec~
+}
+
+air int decToOctal(int n){
+    int oct = 0~
+    int place = 1~
+
+    cycle(n > 0){
+      int mod = n % 8~
+      oct = oct + mod * place~
+
+      place = place * 10~
+      n = n / 8~
+    }
+
+    gasp oct~
+}
+
+air int binToOctal(int bin){
+    int dec = binToDec(bin)~
+    int oct = decToOctal(dec)~
+
+    gasp oct~
+}
+
+air string decToHex(int n){
+    string hex = ""~
+
+    cycle(n > 0){
+        int mod = n % 16~
+        string digit~
+
+        stream(mod){
+            case 10: digit = "A"~ resist~
+            case 11: digit = "B"~ resist~
+            case 12: digit = "C"~ resist~
+            case 13: digit = "D"~ resist~
+            case 14: digit = "E"~ resist~
+            case 15: digit = "F"~ resist~
+            diffuse: digit = "@{mod}"~ resist~
+        }
+
+        hex = digit & hex~
+        n = n / 16~
+
+    }
+    gasp hex~
+}
+
+air string binToHex(int bin){
+    int dec = binToDec(bin)~
+    string hex = decToHex(dec)~
+
+    gasp hex~
+}
+
+atmosphere(){
+    int bin~
+
+    exhale("Enter binary number: ")~
+    inhale(bin)~
+
+    int dec = binToDec(bin)~
+    int oct = binToOctal(bin)~
+    string hex = binToHex(bin)~
+
+    exhale("\nDecimal: @{dec}")~
+    exhale("\nOctal: @{oct}")~
+    exhale("\nHexadecimal: @{hex}")~
+
+}

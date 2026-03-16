@@ -1,0 +1,20 @@
+atmosphere(){
+    int n~
+
+    exhale("Enter n: ")~
+    inhale(n)~
+
+    int sum2 = 0, sum3~
+
+    echo(int i = 1~ i <= n~ i++~){
+        sum2 += i * i~
+    }
+
+    echo(int i = 1~ i <= n~ i++~){
+        sum3 += i * i * i~
+    }
+
+    exhale("Sum of squares = @{sum2}")~
+    exhale("\nSum of cubes = @{sum3}")~
+
+}

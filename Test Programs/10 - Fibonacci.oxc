@@ -1,0 +1,16 @@
+atmosphere(){
+    int n~
+
+    exhale("Enter length of sequence: ")~
+    inhale(n)~
+
+    int a = 0~
+    int b = 1~
+
+    echo(int i = 0~ i < n~ i++~){
+        exhale("@{a} ")~
+        int next = a + b~
+        a = b~
+        b = next~
+    }
+}

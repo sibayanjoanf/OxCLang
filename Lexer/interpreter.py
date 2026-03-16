@@ -704,7 +704,8 @@ class Interpreter:
         self.push_scope()
         try:
             for (pid, ptype), aval in zip(params, args):
-                self._assign(pid, self._coerce_to(ptype, aval))
+                key = self._scope_key(pid)
+                self.scopes[-1][key] = self._coerce_to(ptype, aval)
             try:
                 self._exec(body)
                 # explicit return statement node exists; execute it to return value or nothing

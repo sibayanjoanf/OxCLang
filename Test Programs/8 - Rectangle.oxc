@@ -1,0 +1,16 @@
+atmosphere(){
+    int rows, cols~
+
+    exhale("Enter rows: ")~
+    inhale(rows)~
+
+    exhale("Enter columns: ")~
+    inhale(cols)~
+
+    echo(int i = 1~ i <= rows~ i++~){
+        echo(int j = 1~ j <= cols~ j++~){
+            exhale("*")~
+        }
+        exhale("\n")~
+    }
+}
