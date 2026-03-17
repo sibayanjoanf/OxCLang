@@ -7,4 +7,4 @@ Windows Registry Editor Version 5.00
 @="OxC Lang Source File"
 
 [HKEY_CURRENT_USER\Software\Classes\OxclangFile\DefaultIcon]
-@="C:\\Users\\Russell\\OxCLang\\Lexer\\static\\oxc.ico"
+@="C:\\Users\\ENDRIX\\Documents\\OxClang\\OxCLang\\Lexer\\static\\oxc.ico"

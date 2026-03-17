@@ -267,7 +267,15 @@ class SemanticAnalyzer:
         return (0, 0)
 
     def _validate_string_interpolation(self, string_value, node_for_location=None):
-        """Validate every @{identifier} or @{parent.member} in a string (parent-then-member for structures)."""
+        """
+        Validate every @{...} placeholder inside a string.
+        
+        v3 rules:
+        - Only variables are allowed inside @{...}; no function calls.
+        - Allow struct member form: @{parent.member}
+        - Allow array element form: @{arr[0]} or @{matrix[1][1]}
+        - Do NOT allow whole arrays or whole gusts to be interpolated.
+        """
         if not string_value or not isinstance(string_value, str) or '@{' not in string_value:
             return
 
@@ -279,73 +287,134 @@ class SemanticAnalyzer:
                 line, col = self.get_literal_location(string_value)
             return line, col
 
+        def resolve_by_actual_name(name):
+            for scope in reversed(self.scopes):
+                for key in scope:
+                    if self.get_actual_name(key) == name:
+                        return key, scope[key]
+            return None, None
+
+        def parse_placeholder(raw):
+            """
+            Parse placeholder content into one of:
+            - ('struct', parent_name, member_name)
+            - ('array', base_name, dims_count) where dims_count is number of indices provided (1 or 2)
+            - ('var', name)
+            Returns (kind, ...) or (None, reason).
+            """
+            s = raw.strip()
+            if not s:
+                return None, "empty placeholder"
+            # Disallow function calls in placeholders
+            if '(' in s or ')' in s:
+                return None, "function call not allowed in string interpolation"
+            # Struct member: parent.member (no mixing with [] for now)
+            if '.' in s:
+                parts = s.split('.', 1)
+                parent = parts[0].strip()
+                member = parts[1].strip() if len(parts) > 1 else ''
+                if not parent or not member:
+                    return None, "invalid struct placeholder"
+                if '[' in parent or ']' in parent or '[' in member or ']' in member:
+                    return None, "invalid placeholder (cannot mix '.' with '[]')"
+                return ('struct', parent, member)
+            # Array element: name[...][...] (only count bracket pairs; contents validated lightly)
+            if '[' in s or ']' in s:
+                base = s.split('[', 1)[0].strip()
+                if not base:
+                    return None, "missing base identifier"
+                # Count bracket pairs and ensure they are balanced at a basic level
+                dims = 0
+                i = len(base)
+                while i < len(s):
+                    if s[i].isspace():
+                        i += 1
+                        continue
+                    if s[i] != '[':
+                        return None, "unexpected characters after base identifier"
+                    j = s.find(']', i + 1)
+                    if j == -1:
+                        return None, "unclosed ']' in placeholder"
+                    inside = s[i + 1:j].strip()
+                    # empty index ([]) is treated as whole-array reference; not allowed in interpolation
+                    if inside == '':
+                        return None, "empty array index not allowed in string interpolation"
+                    dims += 1
+                    i = j + 1
+                    if dims > 2:
+                        return None, "too many dimensions in placeholder"
+                return ('array', base, dims)
+            # Simple variable
+            return ('var', s)
+
         for id_str in re.findall(r'@\{([^}]+)\}', string_value):
             id_str = id_str.strip()
             if not id_str:
                 continue
+            parsed = parse_placeholder(id_str)
+            if not parsed or parsed[0] is None:
+                reason = parsed[1] if isinstance(parsed, tuple) and len(parsed) > 1 else "invalid placeholder"
+                line, col = get_line_col()
+                self.error(
+                    f"Invalid string interpolation '{id_str}': {reason}",
+                    line, col,
+                )
+                continue
 
-            if '.' in id_str:
-                # Parent-then-member: resolve parent, then check member exists on that structure
-                parts = id_str.split('.', 1)
-                parent_name = parts[0].strip()
-                member_name = parts[1].strip() if len(parts) > 1 else None
-                if not parent_name or not member_name:
-                    line, col = get_line_col()
-                    self.error(
-                        f"Invalid string interpolation '{id_str}'; expected identifier or parent.member",
-                        line, col,
-                    )
-                    continue
-                parent_symbol = None
-                for scope in reversed(self.scopes):
-                    for key in scope:
-                        if self.get_actual_name(key) == parent_name:
-                            parent_symbol = scope[key]
-                            break
-                    if parent_symbol is not None:
-                        break
+            kind = parsed[0]
+            if kind == 'struct':
+                _, parent_name, member_name = parsed
+                parent_key, parent_symbol = resolve_by_actual_name(parent_name)
                 if parent_symbol is None:
                     line, col = get_line_col()
-                    self.error(
-                        f"Undeclared identifier '{parent_name}' in string interpolation",
-                        line, col,
-                    )
+                    self.error(f"Undeclared identifier '{parent_name}' in string interpolation", line, col)
                     continue
                 struct_type = parent_symbol.get('struct_type')
                 if not struct_type:
                     line, col = get_line_col()
-                    self.error(
-                        f"'{parent_name}' is not a structure; cannot access member in string interpolation",
-                        line, col,
-                    )
+                    self.error(f"'{parent_name}' is not a structure; cannot access member in string interpolation", line, col)
                     continue
                 struct_def = self.get_structure(struct_type)
                 if not struct_def:
                     continue
-                # struct_def keys are token types (id3, id4); member_name is source text ("name")
                 member_found = any(self.get_actual_name(k) == member_name for k in struct_def)
                 if not member_found:
                     line, col = get_line_col()
-                    self.error(
-                        f"'{member_name}' is not a member of structure '{parent_name}'",
-                        line, col,
-                    )
-            else:
-                # Single identifier: resolve by full name
-                found = False
-                for scope in reversed(self.scopes):
-                    for key in scope:
-                        if self.get_actual_name(key) == id_str:
-                            found = True
-                            break
-                    if found:
-                        break
-                if not found:
+                    self.error(f"'{member_name}' is not a member of structure '{parent_name}'", line, col)
+                continue
+
+            if kind == 'array':
+                _, base_name, dims = parsed
+                base_key, base_symbol = resolve_by_actual_name(base_name)
+                if base_symbol is None:
                     line, col = get_line_col()
-                    self.error(
-                        f"Undeclared identifier '{id_str}' in string interpolation",
-                        line, col,
-                    )
+                    self.error(f"Undeclared identifier '{base_name}' in string interpolation", line, col)
+                    continue
+                if not base_symbol.get('is_array'):
+                    line, col = get_line_col()
+                    self.error(f"'{base_name}' is not an array; cannot index in string interpolation", line, col)
+                    continue
+                declared_dims = len(base_symbol.get('array_dimensions') or [])
+                if declared_dims == 0:
+                    declared_dims = 1
+                if dims > declared_dims:
+                    line, col = get_line_col()
+                    self.error(f"Too many indices for array '{base_name}' in string interpolation", line, col)
+                continue
+
+            if kind == 'var':
+                _, name = parsed
+                key, symbol = resolve_by_actual_name(name)
+                if symbol is None:
+                    line, col = get_line_col()
+                    self.error(f"Undeclared identifier '{name}' in string interpolation", line, col)
+                    continue
+                if symbol.get('is_array'):
+                    line, col = get_line_col()
+                    self.error(f"Whole arrays cannot be used in string interpolation ('{name}')", line, col)
+                if symbol.get('struct_type'):
+                    line, col = get_line_col()
+                    self.error(f"Whole structures cannot be used in string interpolation ('{name}')", line, col)
 
     # ====================== Main Entry ======================
 
@@ -436,9 +505,17 @@ class SemanticAnalyzer:
                         dimensions = self._get_array_dimensions(first_child)
                         self._validate_array_size(first_child, identifier)
                         declared_size = self._get_array_declared_size(first_child)
+                        # VLA rule: if declared_size is not constant (None), initialization is not allowed.
                         if len(norm_dec.children) > 1:
                             array_node = norm_dec.children[1]
                             if array_node.type == 'array' and array_node.children:
+                                if declared_size is None:
+                                    line, col = self.get_location(identifier)
+                                    actual_name = self.get_actual_name(identifier)
+                                    self.error(
+                                        f"Variable-length array '{actual_name}' cannot be initialized at declaration",
+                                        line, col,
+                                    )
                                 init_count = self._validate_array_elements(array_node, data_type, identifier)
                                 if declared_size is not None and init_count > declared_size:
                                     line, col = self.get_location(identifier)
@@ -491,6 +568,13 @@ class SemanticAnalyzer:
                             if len(norm_dec.children) > 1:
                                 array_node = norm_dec.children[1]
                                 if array_node.type == 'array' and array_node.children:
+                                    if declared_size is None:
+                                        line, col = self.get_location(identifier)
+                                        actual_name = self.get_actual_name(identifier)
+                                        self.error(
+                                            f"Variable-length array '{actual_name}' cannot be initialized at declaration",
+                                            line, col,
+                                        )
                                     init_count = self._validate_array_elements(array_node, data_type, identifier)
                                     if declared_size is not None and init_count > declared_size:
                                         line, col = self.get_location(identifier)
@@ -981,6 +1065,18 @@ class SemanticAnalyzer:
         
         for child in node.children:
             if child.type == 'expr':
+                # Disallow returning arrays explicitly
+                if self._expr_is_whole_array(child):
+                    func_name = (
+                        self.get_actual_name(self.current_function)
+                        if self.current_function else 'atmosphere'
+                    )
+                    line, col = self.get_location('gasp')
+                    self.error(
+                        f"Arrays cannot be returned from function '{func_name}'",
+                        line, col,
+                    )
+                    continue
                 return_type = self._get_expression_type(child)
                 func_name = (
                     self.get_actual_name(self.current_function)
@@ -1016,6 +1112,38 @@ class SemanticAnalyzer:
                 f"'{self.current_function_return_type}'",
                 line, col,
             )
+
+    def _expr_is_whole_array(self, expr_node):
+        """
+        Return True if expr_node resolves to a whole-array identifier (not indexed).
+        This is used for enforcing 'arrays cannot be returned' and other rules.
+        """
+        if expr_node is None:
+            return False
+        # Unwrap expr -> logic_expr -> ... quickly via _get_expression_type plus a structural check
+        if not hasattr(expr_node, 'children') or not expr_node.children:
+            return False
+        # Look for an identifier node within the expression that is the primary value
+        def find_identifier(n):
+            if n is None or not hasattr(n, 'type'):
+                return None
+            if n.type == 'identifier':
+                return n
+            if hasattr(n, 'children') and n.children:
+                for c in n.children:
+                    if hasattr(c, 'type'):
+                        r = find_identifier(c)
+                        if r is not None:
+                            return r
+            return None
+        ident = find_identifier(expr_node)
+        if ident is None:
+            return False
+        info = self._get_identifier_access_info(ident)
+        if not info:
+            return False
+        symbol, indexed, _ = info
+        return bool(symbol and symbol.get('is_array') and not indexed)
 
     # ====================== Statements ======================
 
@@ -1126,15 +1254,61 @@ class SemanticAnalyzer:
                             )
             return
         
+        # Track whether this statement is attempting whole-array assignment (`arr = ...`)
+        # vs element assignment (`arr[i] = ...`). This flag is consumed by _check_assignment.
+        self._current_assignment_target_is_whole_array = False
+        has_indexing = False
+
+        # Pre-scan id_access to determine if there is a non-empty index
+        for child in node.children:
+            if getattr(child, 'type', None) == 'id_access' and child.children and hasattr(child.children[0], 'type') and child.children[0].type == 'dimension':
+                dim = child.children[0]
+                for dc in getattr(dim, 'children', []):
+                    if hasattr(dc, 'type') and dc.type == 'row_size':
+                        for rsc in getattr(dc, 'children', []):
+                            if hasattr(rsc, 'type') and rsc.type == 'size' and getattr(rsc, 'children', None):
+                                has_indexing = True
+                        for rsc in getattr(dc, 'children', []):
+                            if hasattr(rsc, 'type') and rsc.type == 'col_size' and getattr(rsc, 'children', None):
+                                for cc in rsc.children:
+                                    if hasattr(cc, 'type') and cc.type == 'pdim_size' and getattr(cc, 'children', None):
+                                        has_indexing = True
+
         for child in node.children:
             if child.type == 'param_opts':
                 self._check_function_call(identifier, child)
             elif child.type == 'assignment':
+                # No id_access was seen in this id_stat_body; treat as whole identifier target.
+                sym = self.lookup(identifier) if identifier else None
+                if sym and sym.get('is_array'):
+                    self._current_assignment_target_is_whole_array = True
                 self._check_assignment(child, identifier, actual_name)
             elif child.type in ('id_stat_tail', 'identifier_stat'):
+                # If assignment appears in the tail and the base is an array, only allow when indexed
+                sym = self.lookup(identifier) if identifier else None
+                if sym and sym.get('is_array') and not has_indexing:
+                    # Set marker so _check_assignment can emit the specific array error
+                    self._current_assignment_target_is_whole_array = True
                 self._visit_id_stat_tail(child, identifier)
             elif child.type == 'id_access':
+                # If we see dimension indexing, this is element assignment (unless index is empty)
+                if child.children and hasattr(child.children[0], 'type') and child.children[0].type == 'dimension':
+                    dim = child.children[0]
+                    # dimension -> row_size or empty; if row_size has a non-empty size, it's indexed
+                    indexed = False
+                    for dc in getattr(dim, 'children', []):
+                        if hasattr(dc, 'type') and dc.type == 'row_size':
+                            for rsc in getattr(dc, 'children', []):
+                                if hasattr(rsc, 'type') and rsc.type == 'size' and getattr(rsc, 'children', None):
+                                    indexed = True
+                    if not indexed:
+                        sym = self.lookup(identifier) if identifier else None
+                        if sym and sym.get('is_array'):
+                            self._current_assignment_target_is_whole_array = True
                 self._visit_id_access_for_assignment(child, identifier)
+
+        # Reset marker
+        self._current_assignment_target_is_whole_array = False
     
     def _visit_id_access_for_assignment(self, node, identifier):
         """Handle id_access which might be struct member access or array index."""
@@ -1143,6 +1317,15 @@ class SemanticAnalyzer:
                 if child.type == 'identifier':
                     # Struct member access: id.member
                     self._validate_struct_member_access(identifier, child.value)
+                if child.type == 'dimension':
+                    # Array indexing on LHS: ensure base is actually an array
+                    sym = self.lookup(identifier) if identifier else None
+                    if sym and not sym.get('is_array'):
+                        line, col = self.get_location(identifier)
+                        self.error(
+                            f"'{self.get_actual_name(identifier)}' is not an array; cannot use '[]' indexing",
+                            line, col,
+                        )
                 self.visit(child)
     
     def _validate_struct_member_access(self, struct_id, member_id):
@@ -1207,6 +1390,19 @@ class SemanticAnalyzer:
         
         if not symbol:
             return
+
+        # Arrays cannot be assigned as whole values (must assign via index)
+        if symbol.get('is_array'):
+            # If this assignment came from `arr = ...` (no index), it is invalid.
+            # We can't always see the id_access here, so this is guarded by a marker set
+            # by the identifier-statement visitor.
+            if getattr(self, '_current_assignment_target_is_whole_array', False):
+                line, col = self.get_location(identifier)
+                self.error(
+                    f"Cannot assign to entire array '{actual_name}'; assign to an element index instead",
+                    line, col,
+                )
+                return
         
         # Cannot assign to constants
         if symbol['is_constant']:
@@ -1305,10 +1501,31 @@ class SemanticAnalyzer:
             )
             return
         
-        # Use strict parameter conversion rules (only int<->float)
+        # Use strict parameter conversion rules (only int<->float), plus array-ness check.
         for i, (arg_type, (param_name, param_type, is_array, dims)) in enumerate(
             zip(arg_types, expected_params)
         ):
+            if is_array:
+                # Expect an array argument (whole array), not an element/scalar.
+                expected_suffix = "[]" * (len(dims) if dims else 1)
+                if not arg_type or "[]" not in str(arg_type):
+                    line, col = self.get_location(func_name)
+                    self.error(
+                        f"Argument {i+1} of function '{actual_name}': expected array parameter '{param_type}{expected_suffix}'",
+                        line, col,
+                    )
+                    continue
+                # Base type must match (no implicit conversions for arrays)
+                base_arg = str(arg_type).split('[')[0]
+                if base_arg != param_type:
+                    line, col = self.get_location(func_name)
+                    self.error(
+                        f"Argument {i+1} of function '{actual_name}': expected '{param_type}{expected_suffix}', got '{arg_type}'",
+                        line, col,
+                    )
+                    continue
+                continue
+
             if arg_type and not self._types_compatible_for_params(param_type, arg_type):
                 line, col = self.get_location(func_name)
                 self.error(
@@ -1711,6 +1928,7 @@ class SemanticAnalyzer:
         # Leaf: literal value
         if node.type == 'value':
             if node.value and isinstance(node.value, str) and '"' in node.value:
+                self._validate_string_escapes(node.value, node)
                 self._validate_string_interpolation(node.value, node)
             return self._get_value_type(node.value)
         
@@ -1719,6 +1937,12 @@ class SemanticAnalyzer:
             if node.value and (not hasattr(node, 'children') or not node.children):
                 symbol = self.lookup(node.value)
                 if symbol:
+                    # Whole array identifier used as a value
+                    if symbol.get('is_array'):
+                        dims = len(symbol.get('array_dimensions') or [])
+                        if dims == 0:
+                            dims = 1
+                        return f"{symbol['data_type']}" + ("[]" * dims)
                     return symbol['data_type']
                 line, col = self.get_location(node.value) or self.get_node_location(node)
                 actual_name = self.get_actual_name(node.value)
@@ -1748,6 +1972,47 @@ class SemanticAnalyzer:
                                 member_type = self._validate_struct_member_access(first.value, member_id_node.value)
                                 if member_type is not None:
                                     return member_type
+                        # Array indexing: id_access -> dimension -> row_size
+                        if id_access.type == 'id_access' and id_access.children and hasattr(id_access.children[0], 'type') and id_access.children[0].type == 'dimension':
+                            dim = id_access.children[0]
+                            # Determine whether this access is indexed (element) or whole-array reference
+                            sym = self.lookup(first.value)
+                            if sym is None:
+                                return None
+                            if not sym.get('is_array'):
+                                line, col = self.get_location(first.value)
+                                self.error(
+                                    f"'{self.get_actual_name(first.value)}' is not an array; cannot use '[]' indexing",
+                                    line, col,
+                                )
+                                return sym.get('data_type')
+                            # Validate index expression types
+                            self.visit(dim)
+                            indexed = False
+                            dims_used = 0
+                            for dc in getattr(dim, 'children', []):
+                                if hasattr(dc, 'type') and dc.type == 'row_size':
+                                    # row index
+                                    for rsc in getattr(dc, 'children', []):
+                                        if hasattr(rsc, 'type') and rsc.type == 'size':
+                                            if getattr(rsc, 'children', None):
+                                                indexed = True
+                                                dims_used += 1
+                                    # col index (2D)
+                                    for rsc in getattr(dc, 'children', []):
+                                        if hasattr(rsc, 'type') and rsc.type == 'col_size' and getattr(rsc, 'children', None):
+                                            for cc in rsc.children:
+                                                if hasattr(cc, 'type') and cc.type == 'pdim_size' and getattr(cc, 'children', None):
+                                                    indexed = True
+                                                    dims_used += 1
+                            if indexed:
+                                # Accessing an element yields the base data type
+                                return sym.get('data_type')
+                            # Not indexed -> whole array
+                            dims_decl = len(sym.get('array_dimensions') or [])
+                            if dims_decl == 0:
+                                dims_decl = 1
+                            return f"{sym['data_type']}" + ("[]" * dims_decl)
                     return base_type
             return None
         
@@ -1755,6 +2020,7 @@ class SemanticAnalyzer:
         if node.type == 'output_content':
             value = node.value
             if value and isinstance(value, str) and '"' in value:
+                self._validate_string_escapes(value, node)
                 self._validate_string_interpolation(value, node)
             if value and len(value) >= 2:
                 if value[0] == '"':
@@ -1824,7 +2090,19 @@ class SemanticAnalyzer:
                     if tail.type == 'rela_tail' and tail.children and len(tail.children) >= 2:
                         # Recurse into right operand and enforce string constraints
                         self._check_relational_string_constraints(node.children[0], tail)
-                        self._get_expression_type(tail.children[1])
+                        # Enforce: arrays cannot be compared as whole values
+                        left_t = self._get_expression_type(node.children[0])
+                        right_t = self._get_expression_type(tail.children[1])
+                        if (left_t and '[]' in left_t) or (right_t and '[]' in right_t):
+                            line, col = self._find_value_location(tail)
+                            if (line, col) == (0, 0):
+                                line, col = self._find_value_location(node.children[0])
+                            if (line, col) == (0, 0):
+                                line, col = self.get_node_location(tail)
+                            self.error(
+                                "Arrays cannot be compared or operated on as whole values; compare elements instead",
+                                line, col,
+                            )
                     if tail.type == 'rela_tail' and tail.children:
                         return 'bool'
                 if node.type == 'logic_expr' and len(node.children) > 1:
@@ -1849,6 +2127,57 @@ class SemanticAnalyzer:
                     if result:
                         return result
         
+        return None
+
+    def _get_identifier_access_info(self, identifier_node):
+        """
+        Returns (symbol, indexed, dims_declared) for an identifier ASTNode.
+        indexed=True if identifier_node includes a non-empty [index] (or [i][j]) access.
+        """
+        if identifier_node is None or not hasattr(identifier_node, 'type') or identifier_node.type != 'identifier':
+            return None
+
+        # Case: identifier node created with value only (leaf)
+        if getattr(identifier_node, 'value', None) and (not getattr(identifier_node, 'children', None)):
+            sym = self.lookup(identifier_node.value)
+            if not sym:
+                return None
+            dims_decl = len(sym.get('array_dimensions') or [])
+            if dims_decl == 0 and sym.get('is_array'):
+                dims_decl = 1
+            return (sym, False, dims_decl)
+
+        # Case: identifier -> [id_no, id_tail]
+        if hasattr(identifier_node, 'children') and len(identifier_node.children) >= 2:
+            id_no = identifier_node.children[0]
+            id_tail = identifier_node.children[1]
+            if not (hasattr(id_no, 'type') and id_no.type == 'identifier' and hasattr(id_no, 'value')):
+                return None
+            sym = self.lookup(id_no.value)
+            if not sym:
+                return None
+            dims_decl = len(sym.get('array_dimensions') or [])
+            if dims_decl == 0 and sym.get('is_array'):
+                dims_decl = 1
+
+            indexed = False
+            if hasattr(id_tail, 'children') and id_tail.children:
+                id_access = id_tail.children[0]
+                if hasattr(id_access, 'type') and id_access.type == 'id_access' and id_access.children:
+                    dim = id_access.children[0]
+                    if hasattr(dim, 'type') and dim.type == 'dimension':
+                        for dc in getattr(dim, 'children', []):
+                            if hasattr(dc, 'type') and dc.type == 'row_size':
+                                for rsc in getattr(dc, 'children', []):
+                                    if hasattr(rsc, 'type') and rsc.type == 'size' and getattr(rsc, 'children', None):
+                                        indexed = True
+                                for rsc in getattr(dc, 'children', []):
+                                    if hasattr(rsc, 'type') and rsc.type == 'col_size' and getattr(rsc, 'children', None):
+                                        for cc in rsc.children:
+                                            if hasattr(cc, 'type') and cc.type == 'pdim_size' and getattr(cc, 'children', None):
+                                                indexed = True
+            return (sym, indexed, dims_decl)
+
         return None
     
     def _resolve_binary_type(self, left_type, tail_node):
@@ -2051,6 +2380,11 @@ class SemanticAnalyzer:
                     dimensions.append('unsized')
                 elif child.type == 'col_size':
                     process_node(child)
+                elif child.type == 'pdim_size' and child.children:
+                    # Second dimension of 2D arrays uses pdim_size
+                    dimensions.append('sized')
+                elif child.type == 'col_size_empty':
+                    pass
         
         process_node(row_size_node)
         return dimensions if dimensions else ['unsized']
@@ -2082,13 +2416,159 @@ class SemanticAnalyzer:
                             return result
             return None
 
-        for child in row_size_node.children:
+        # NOTE: This function historically returned only the first dimension's literal,
+        # which breaks 2D arrays (needs rows*cols) and can mis-handle expressions.
+        # We now attempt to evaluate constant integer sizes for 1D and 2D.
+
+        def eval_const_int_expr(node):
+            """
+            Best-effort evaluator for constant integer arithmetic expressions in array sizes.
+            Returns int on success, else None.
+            Supports +, -, *, /, %, parentheses, unary minus, and treats bool/char/float/identifier/calls as non-constant.
+            """
+            if node is None or not hasattr(node, 'type'):
+                return None
+
+            t = node.type
+
+            # Direct numeric literal
+            if t == 'value' and hasattr(node, 'value'):
+                v = node.value
+                # Only accept integers here
+                try:
+                    # Reject floats like "3.14"
+                    if isinstance(v, str) and '.' in v:
+                        return None
+                    return int(v)
+                except Exception:
+                    return None
+
+            # Identifiers / function calls are not compile-time constants here
+            if t in ('identifier', 'function_call'):
+                return None
+
+            # output_content can be string/char literals; not a constant int size
+            if t == 'output_content':
+                return None
+
+            # Wrapper nodes: evaluate first child
+            if hasattr(node, 'children') and node.children:
+                if t in ('size', 'pdim_size', 'expr', 'logic_expr', 'and_expr', 'rela_expr', 'arith_expr', 'term', 'factor', 'primary', 'negate', 'output', 'literal', 'param_item', 'cond_stat'):
+                    # Special case: unary minus production stored as primary -> negate without an explicit operator node
+                    if t == 'primary' and len(node.children) == 1:
+                        return eval_const_int_expr(node.children[0])
+                    if t == 'negate' and len(node.children) == 1:
+                        return eval_const_int_expr(node.children[0])
+                    return eval_const_int_expr(node.children[0])
+
+            # Binary arithmetic: arith_expr = term arith_tail; term = factor term_tail
+            if t == 'arith_expr' and len(node.children) >= 2:
+                left = eval_const_int_expr(node.children[0])
+                if left is None:
+                    return None
+                return self._eval_const_tail(left, node.children[1], kind='arith')
+            if t == 'term' and len(node.children) >= 2:
+                left = eval_const_int_expr(node.children[0])
+                if left is None:
+                    return None
+                return self._eval_const_tail(left, node.children[1], kind='term')
+
+            return None
+
+        # Extract row and optional col size expressions
+        row_val = None
+        col_val = None
+        for child in getattr(row_size_node, 'children', []):
+            if not hasattr(child, 'type'):
+                continue
             if child.type == 'size' and child.children:
-                size_expr = child.children[0]  # typically an arith_expr
-                value = extract_int_literal(size_expr)
-                if value is not None:
-                    return value
-        return None
+                row_val = eval_const_int_expr(child.children[0])
+            if child.type == 'col_size' and child.children:
+                for col_child in child.children:
+                    if hasattr(col_child, 'type') and col_child.type == 'pdim_size' and col_child.children:
+                        col_val = eval_const_int_expr(col_child.children[0])
+
+        if row_val is None:
+            return None
+        if col_val is None:
+            return row_val
+        return row_val * col_val
+
+    def _eval_const_tail(self, left_value, tail_node, kind='arith'):
+        """
+        Evaluate a constant arith_tail/term_tail chain.
+        kind='arith' supports +/-, kind='term' supports */%.
+        """
+        if tail_node is None or not hasattr(tail_node, 'type'):
+            return left_value
+        if tail_node.type in ('arith_tail_empty', 'term_tail_empty'):
+            return left_value
+        if not hasattr(tail_node, 'children') or len(tail_node.children) < 2:
+            return left_value
+
+        op_node = tail_node.children[0]
+        right_node = tail_node.children[1]
+        op = getattr(op_node, 'children', [op_node])[0]
+        op_val = getattr(op, 'value', None) if hasattr(op, 'value') else getattr(op_node, 'value', None)
+
+        right_val = None
+        # Reuse _get_array_declared_size's local evaluator via _get_expression_type isn't safe; do a minimal literal-only eval:
+        def lit_eval(n):
+            if n is None or not hasattr(n, 'type'):
+                return None
+            if n.type == 'value' and hasattr(n, 'value'):
+                try:
+                    if isinstance(n.value, str) and '.' in n.value:
+                        return None
+                    return int(n.value)
+                except Exception:
+                    return None
+            if n.type in ('identifier', 'function_call', 'output_content'):
+                return None
+            if hasattr(n, 'children') and n.children:
+                # handle nested arith/term structures
+                if n.type == 'arith_expr' and len(n.children) >= 2:
+                    lv = lit_eval(n.children[0])
+                    if lv is None:
+                        return None
+                    return self._eval_const_tail(lv, n.children[1], kind='arith')
+                if n.type == 'term' and len(n.children) >= 2:
+                    lv = lit_eval(n.children[0])
+                    if lv is None:
+                        return None
+                    return self._eval_const_tail(lv, n.children[1], kind='term')
+                return lit_eval(n.children[0])
+            return None
+
+        right_val = lit_eval(right_node)
+        if right_val is None:
+            return None
+
+        try:
+            if op_val == '+':
+                out = left_value + right_val
+            elif op_val == '-':
+                out = left_value - right_val
+            elif op_val == '*':
+                out = left_value * right_val
+            elif op_val == '/':
+                if right_val == 0:
+                    return None
+                out = left_value // right_val
+            elif op_val == '%':
+                if right_val == 0:
+                    return None
+                out = left_value % right_val
+            else:
+                return None
+        except Exception:
+            return None
+
+        # Continue tail recursion if there is another tail node
+        next_tail = tail_node.children[2] if len(tail_node.children) > 2 else None
+        if next_tail is None:
+            return out
+        return self._eval_const_tail(out, next_tail, kind=kind)
     
     def _validate_array_size(self, row_size_node, identifier=None):
         """
@@ -2258,6 +2738,37 @@ class SemanticAnalyzer:
                         if col_index_type and col_index_type != 'int':
                             line, col = self._find_value_location(col_child)
                             self.error(f"Array index must be an integer, got '{col_index_type}'", line, col)
+
+    def _validate_string_escapes(self, string_token_value, node_for_location=None):
+        """
+        Validate escape sequences inside a string literal token value like "\"hello\\n\"".
+        Allowed: \\@, \\", \\\', \\\\, \\n, \\t
+        Report semantic error for others (e.g. \\q).
+        """
+        if not string_token_value or not isinstance(string_token_value, str):
+            return
+        if len(string_token_value) < 2 or string_token_value[0] != '"' or string_token_value[-1] != '"':
+            return
+        content = string_token_value[1:-1]
+        allowed = {'@', '"', "'", '\\', 'n', 't'}
+        i = 0
+        while i < len(content):
+            if content[i] == '\\':
+                if i + 1 >= len(content):
+                    line, col = self._find_value_location(node_for_location) if node_for_location is not None else (0, 0)
+                    self.error("Invalid escape sequence: trailing backslash", line, col)
+                    return
+                esc = content[i + 1]
+                if esc not in allowed:
+                    line, col = (0, 0)
+                    if node_for_location is not None:
+                        line, col = self._find_value_location(node_for_location)
+                    if line == 0 and col == 0:
+                        line, col = self.get_literal_location(string_token_value)
+                    self.error(f"Invalid escape sequence '\\{esc}'", line, col)
+                i += 2
+                continue
+            i += 1
 
     # ====================== Remaining Visitor Stubs ======================
 

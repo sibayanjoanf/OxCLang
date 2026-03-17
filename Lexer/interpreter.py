@@ -55,7 +55,8 @@ class Interpreter:
 
         # function metadata
         self.functions: Dict[str, Any] = {}  # name -> air_func node
-        self.function_params: Dict[str, List[Tuple[str, str]]] = {}  # name -> [(param_id, param_type)]
+        # name -> [(param_id, param_type, is_array)]
+        self.function_params: Dict[str, List[Tuple[str, str, bool]]] = {}
         self.function_return_type: Dict[str, str] = {}  # name -> return type
 
         # interactive input state
@@ -221,17 +222,23 @@ class Interpreter:
         dt = return_type_node.children[0]
         return dt.value
 
-    def _read_params(self, params_node) -> List[Tuple[str, str]]:
+    def _read_params(self, params_node) -> List[Tuple[str, str, bool]]:
         if params_node.type == "params_empty":
             return []
-        params: List[Tuple[str, str]] = []
+        params: List[Tuple[str, str, bool]] = []
         # params: [data_type, identifier, params_dim, params_tail]
         # params_tail (next param): [data_type, identifier, params_dim, params_tail] — same shape
         cur = params_node
         while cur and getattr(cur, "type", None) in ("params", "params_tail"):
             dt = cur.children[0].value
             pid = cur.children[1].value
-            params.append((pid, dt))
+            # params_dim indicates array parameters (1D or 2D). For 1D it's [].
+            is_array = False
+            if len(cur.children) > 2:
+                pd = cur.children[2]
+                if getattr(pd, "type", None) == "params_dim" and getattr(pd, "children", None):
+                    is_array = True
+            params.append((pid, dt, is_array))
             tail = cur.children[3]
             if getattr(tail, "type", None) == "params_tail_empty":
                 break
@@ -367,8 +374,15 @@ class Interpreter:
                 self._assign(identifier_token_type, self._coerce_to(data_type, val))
                 return
             if getattr(first, "type", None) == "row_size":
-                # arrays: initialize default; initialization lists can be added later
-                self._assign(identifier_token_type, [])
+                # arrays: build runtime list; support initializer list if present
+                # norm_dec children: [row_size, array] when array initializer exists
+                init_array = None
+                if len(norm_dec_node.children) > 1:
+                    maybe_array = norm_dec_node.children[1]
+                    if getattr(maybe_array, "type", None) == "array" and getattr(maybe_array, "children", None):
+                        init_array = maybe_array
+                value = self._build_array_value(data_type, first, init_array)
+                self._assign(identifier_token_type, value)
                 return
         self._assign(identifier_token_type, self._default_value(data_type))
 
@@ -392,13 +406,13 @@ class Interpreter:
         # otherwise: [id_access, id_stat_tail]
         id_access = body_node.children[0]
         tail = body_node.children[1]
-        # only support plain var for now (no member/index assignment)
+        # support element assignment for arrays (vid[index] = expr)
         if tail.children and getattr(tail.children[0], "type", None) == "unary_op":
             op = tail.children[0].value
             self._apply_incdec(op, vid, prefix=False)
             return None
         assignment = tail.children[0]
-        return self._exec_assignment(vid, assignment)
+        return self._exec_assignment_with_access(vid, id_access, assignment)
 
     def _exec_assignment(self, vid: str, assignment_node) -> Any:
         # children: assi_op, expr
@@ -431,6 +445,53 @@ class Interpreter:
                 raise InterpreterError("Modulo operator requires integer operands")
             cur_val = cur if cur is not None else 0
             self._assign(vid, cur_val % rhs)
+        return None
+
+    def _exec_assignment_with_access(self, vid: str, id_access_node, assignment_node) -> Any:
+        """
+        Assign to either a plain variable (vid) or an indexed array element (vid[...]).
+        """
+        # If there's no dimension in id_access, fall back to whole-variable assignment
+        if not id_access_node or not getattr(id_access_node, "children", None):
+            return self._exec_assignment(vid, assignment_node)
+        first = id_access_node.children[0]
+        if getattr(first, "type", None) != "dimension":
+            # struct members not supported yet here; treat as whole-var assignment
+            return self._exec_assignment(vid, assignment_node)
+
+        # Evaluate RHS first
+        op_node = assignment_node.children[0]
+        expr_node = assignment_node.children[1]
+        op = op_node.children[0].value
+        rhs = self._eval_expr(expr_node)
+
+        # Only '=' supported for element assignment right now
+        if op != "=":
+            return self._exec_assignment(vid, assignment_node)
+
+        # Evaluate indices from dimension -> row_size
+        indices = self._eval_dimension_indices(first)
+        if not indices:
+            return self._exec_assignment(vid, assignment_node)
+
+        arr = self._lookup(vid)
+        if not isinstance(arr, list):
+            raise InterpreterError(f"'{self.semantic.get_actual_name(vid)}' is not an array")
+
+        if len(indices) == 1:
+            i = indices[0]
+            if i < 0 or i >= len(arr):
+                raise InterpreterError("Array out of bounds")
+            arr[i] = self._coerce_to(self._lookup_declared_type(vid), rhs)
+            return None
+        if len(indices) == 2:
+            r, c = indices
+            if r < 0 or r >= len(arr) or not isinstance(arr[r], list):
+                raise InterpreterError("Array out of bounds")
+            if c < 0 or c >= len(arr[r]):
+                raise InterpreterError("Array out of bounds")
+            arr[r][c] = self._coerce_to(self._lookup_declared_type(vid), rhs)
+            return None
         return None
 
     def _exec_input_output(self, node, resume_child_index: int = 0) -> Any:
@@ -466,14 +527,11 @@ class Interpreter:
         matched = False
         cur = switch_cases_node
         while cur and getattr(cur, "type", None) == "switch_cases":
-            case_const = cur.children[0].value
+            case_raw = cur.children[0].value
+            # Normalize case constant using literal semantics so both int and char
+            # cases compare correctly against the runtime switch value.
+            case_const = self._literal_to_value(case_raw)
             stmt_list = cur.children[1]
-            # Normalize: lexer may give int_lit as string
-            try:
-                if isinstance(case_const, str) and case_const.lstrip('-').isdigit():
-                    case_const = int(case_const)
-            except (ValueError, TypeError):
-                pass
             if switch_val == case_const:
                 matched = True
                 self.push_scope()
@@ -703,9 +761,17 @@ class Interpreter:
         self._current_function_name = func_name
         self.push_scope()
         try:
-            for (pid, ptype), aval in zip(params, args):
+            for (pid, ptype, is_array), aval in zip(params, args):
                 key = self._scope_key(pid)
-                self.scopes[-1][key] = self._coerce_to(ptype, aval)
+                if is_array:
+                    if not isinstance(aval, list):
+                        raise InterpreterError(
+                            f"Argument for array parameter '{self.semantic.get_actual_name(pid)}' must be an array"
+                        )
+                    # Arrays are passed by reference: store the list as-is
+                    self.scopes[-1][key] = aval
+                else:
+                    self.scopes[-1][key] = self._coerce_to(ptype, aval)
             try:
                 self._exec(body)
                 # explicit return statement node exists; execute it to return value or nothing
@@ -1054,6 +1120,30 @@ class Interpreter:
             and getattr(tail.children[0], "type", None) in ("param_opts", "param_opts_empty")
         ):
             return self._call_user_function(id_no, tail.children[0])
+        # id_tail may contain id_access (dimension or member). Support array indexing.
+        if getattr(tail, "type", None) == "id_tail" and getattr(tail, "children", None):
+            id_access = tail.children[0]
+            if getattr(id_access, "type", None) == "id_access" and getattr(id_access, "children", None):
+                first = id_access.children[0]
+                if getattr(first, "type", None) == "dimension":
+                    indices = self._eval_dimension_indices(first)
+                    val = self._lookup(id_no)
+                    if not indices:
+                        return val
+                    if not isinstance(val, list):
+                        raise InterpreterError(f"'{self.semantic.get_actual_name(id_no)}' is not an array")
+                    if len(indices) == 1:
+                        i = indices[0]
+                        if i < 0 or i >= len(val):
+                            raise InterpreterError("Array out of bounds")
+                        return val[i]
+                    if len(indices) == 2:
+                        r, c = indices
+                        if r < 0 or r >= len(val) or not isinstance(val[r], list):
+                            raise InterpreterError("Array out of bounds")
+                        if c < 0 or c >= len(val[r]):
+                            raise InterpreterError("Array out of bounds")
+                        return val[r][c]
         # plain variable reference
         return self._lookup(id_no)
 
@@ -1195,6 +1285,8 @@ class Interpreter:
                     out.append("\r")
                 elif c == "\\":
                     out.append("\\")
+                elif c == "@":
+                    out.append("@")
                 elif c == '"':
                     out.append('"')
                 elif c == "'":
@@ -1217,8 +1309,11 @@ class Interpreter:
             return False
         if isinstance(raw, str):
             if raw.startswith('"') and raw.endswith('"'):
-                inner = self._unescape_string(raw[1:-1])
-                return self._interpolate_string(inner)
+                # IMPORTANT: interpolate BEFORE unescaping so \@{x} stays literal.
+                # Interpolation itself ignores escaped @ via regex negative lookbehind.
+                inner_raw = raw[1:-1]
+                interpolated = self._interpolate_string(inner_raw)
+                return self._unescape_string(interpolated)
             if raw.startswith("'") and raw.endswith("'"):
                 inner = raw[1:-1]
                 return inner if inner != "" else None
@@ -1246,17 +1341,210 @@ class Interpreter:
         for token_type, actual in id_map.items():
             reverse_ids[actual] = token_type
 
+        def _resolve_index_atom(atom: str) -> int:
+            atom = atom.strip()
+            if atom == "":
+                raise InterpreterError("Empty array index in string interpolation")
+            # int literal
+            if re.fullmatch(r"-?\d+", atom):
+                return int(atom)
+            # identifier as index
+            tok = reverse_ids.get(atom)
+            if not tok:
+                raise InterpreterError(f"Undefined variable '{atom}' in string interpolation")
+            v = self._lookup(tok)
+            return int(v)
+
         def repl(match: re.Match) -> str:
             inner = match.group(1).strip()
             if not inner:
                 return match.group(0)
-            token_type = reverse_ids.get(inner)
+
+            # Support name, name[i], name[i][j] (no function calls in v3)
+            m = re.fullmatch(r"([A-Za-z][A-Za-z0-9_]*)\s*(\[(.*?)\])?\s*(\[(.*?)\])?\s*", inner)
+            if not m:
+                return match.group(0)
+            name = m.group(1)
+            i1 = m.group(3)
+            i2 = m.group(5)
+
+            token_type = reverse_ids.get(name)
             if not token_type:
                 return match.group(0)
             val = self._lookup(token_type)
-            return "" if val is None else str(val)
 
-        return re.sub(r"@\{([^}]+)\}", repl, s)
+            if i1 is None and i2 is None:
+                return "" if val is None else str(val)
+
+            # Must be array if indexed
+            if not isinstance(val, list):
+                return match.group(0)
+
+            idx1 = _resolve_index_atom(i1)
+            if idx1 < 0 or idx1 >= len(val):
+                raise InterpreterError("Array out of bounds")
+
+            if i2 is None:
+                v = val[idx1]
+                return "" if v is None else str(v)
+
+            row = val[idx1]
+            if not isinstance(row, list):
+                raise InterpreterError("Array out of bounds")
+            idx2 = _resolve_index_atom(i2)
+            if idx2 < 0 or idx2 >= len(row):
+                raise InterpreterError("Array out of bounds")
+            v = row[idx2]
+            return "" if v is None else str(v)
+
+        # Only interpolate when '@' is NOT escaped (i.e., not preceded by backslash).
+        return re.sub(r"(?<!\\)@\{([^}]+)\}", repl, s)
+
+    def _eval_dimension_indices(self, dimension_node) -> List[int]:
+        """
+        dimension -> row_size | empty
+        row_size -> [ size ] col_size
+        size -> arith_expr
+        col_size -> [ pdim_size ] | empty
+        """
+        if not dimension_node or getattr(dimension_node, "type", None) == "dimension_empty":
+            return []
+        if not getattr(dimension_node, "children", None):
+            return []
+        row_size = dimension_node.children[0]
+        if getattr(row_size, "type", None) != "row_size":
+            return []
+        indices: List[int] = []
+        # row index
+        if row_size.children and len(row_size.children) >= 1:
+            size_node = row_size.children[0]
+            if getattr(size_node, "type", None) == "size" and getattr(size_node, "children", None):
+                v = self._eval_arith(size_node.children[0])
+                indices.append(int(self._to_arith_value(v)))
+        # col index (optional)
+        if row_size.children and len(row_size.children) >= 2:
+            col_size = row_size.children[1]
+            if getattr(col_size, "type", None) == "col_size" and getattr(col_size, "children", None):
+                pd = col_size.children[0]
+                if getattr(pd, "type", None) == "pdim_size" and getattr(pd, "children", None):
+                    v = self._eval_arith(pd.children[0])
+                    indices.append(int(self._to_arith_value(v)))
+        return indices
+
+    def _build_array_value(self, data_type: str, row_size_node, init_array_node) -> Any:
+        """
+        Build a 1D or 2D Python list from an optional initializer list.
+        If initializer is missing, create a list with declared size filled with defaults (when constant),
+        else default to empty list for VLA.
+        """
+        # Determine if 2D by presence of col_size with pdim_size
+        rows = None
+        cols = None
+        # row_size children: [size_node, col_size_node]
+        if getattr(row_size_node, "children", None) and len(row_size_node.children) >= 1:
+            size_node = row_size_node.children[0]
+            if getattr(size_node, "type", None) == "size" and getattr(size_node, "children", None):
+                try:
+                    rows = int(self._to_arith_value(self._eval_arith(size_node.children[0])))
+                except Exception:
+                    rows = None
+        if getattr(row_size_node, "children", None) and len(row_size_node.children) >= 2:
+            col_size = row_size_node.children[1]
+            if getattr(col_size, "type", None) == "col_size" and getattr(col_size, "children", None):
+                pd = col_size.children[0]
+                if getattr(pd, "type", None) == "pdim_size" and getattr(pd, "children", None):
+                    try:
+                        cols = int(self._to_arith_value(self._eval_arith(pd.children[0])))
+                    except Exception:
+                        cols = None
+
+        def dv():
+            return self._default_value(data_type)
+
+        # No init: allocate if constant sizes exist; else empty (VLA)
+        if not init_array_node or not getattr(init_array_node, "children", None):
+            if rows is None:
+                return []
+            if cols is None:
+                return [dv() for _ in range(rows)]
+            return [[dv() for _ in range(cols)] for _ in range(rows)]
+
+        # init_array_node: children = [operator '=', arr_element_node]
+        arr_element = init_array_node.children[1] if len(init_array_node.children) > 1 else None
+        if not arr_element:
+            return []
+
+        # Flatten initializer depending on 1D vs 2D
+        if cols is None:
+            flat: List[Any] = []
+            self._collect_array_init_1d(arr_element, flat)
+            coerced = [self._coerce_to(data_type, v) for v in flat]
+            if rows is None:
+                return coerced
+            out = [dv() for _ in range(rows)]
+            for i, v in enumerate(coerced[:rows]):
+                out[i] = v
+            return out
+
+        rows_list: List[List[Any]] = []
+        self._collect_array_init_2d(arr_element, rows_list)
+        # Coerce and pad
+        if rows is None:
+            rows = len(rows_list)
+        if cols is None:
+            cols = max((len(r) for r in rows_list), default=0)
+        out2 = [[dv() for _ in range(cols)] for _ in range(rows)]
+        for r in range(min(rows, len(rows_list))):
+            for c in range(min(cols, len(rows_list[r]))):
+                out2[r][c] = self._coerce_to(data_type, rows_list[r][c])
+        return out2
+
+    def _collect_array_init_1d(self, node, out: List[Any]) -> None:
+        """Collect 1D initializer elements from parser's arr_element tree."""
+        if node is None:
+            return
+        t = getattr(node, "type", None)
+        if t in ("value", "output_content"):
+            out.append(self._literal_to_value(getattr(node, "value", None)))
+            return
+        if t == "identifier":
+            out.append(self._eval_identifier(node))
+            return
+        if t == "function_call":
+            out.append(self._eval_function_call(node))
+            return
+        if getattr(node, "children", None):
+            for ch in node.children:
+                if hasattr(ch, "type"):
+                    self._collect_array_init_1d(ch, out)
+
+    def _collect_array_init_2d(self, node, rows: List[List[Any]]) -> None:
+        """Collect 2D initializer rows from parser's 2d_element tree."""
+        if node is None:
+            return
+        t = getattr(node, "type", None)
+        if t == "2d_element":
+            # children: [1d_element, 2d_tail]
+            row: List[Any] = []
+            self._collect_array_init_1d(node.children[0], row)
+            rows.append(row)
+            # tail may contain more 1d_element rows
+            self._collect_array_init_2d(node.children[1], rows)
+            return
+        if t == "2d_tail":
+            # children: [1d_element, 2d_tail] or empty
+            if getattr(node, "children", None) and len(node.children) >= 1:
+                row: List[Any] = []
+                self._collect_array_init_1d(node.children[0], row)
+                rows.append(row)
+                if len(node.children) > 1:
+                    self._collect_array_init_2d(node.children[1], rows)
+            return
+        # arr_element wrapper
+        if getattr(node, "children", None):
+            for ch in node.children:
+                if hasattr(ch, "type"):
+                    self._collect_array_init_2d(ch, rows)
 
     def _default_value(self, data_type: str) -> Any:
         if data_type == "int":
@@ -1347,6 +1635,9 @@ class Interpreter:
         if expected_type == "string":
             return txt
         if expected_type == "char":
+            # For char input, accept any non-empty input and take the first
+            # character. Multi-character entries (e.g. "abcde") become 'a'
+            # and will be handled by diffuse in stream if no case matches.
             return txt[0] if txt else None
         if expected_type == "int":
             try:

@@ -1160,9 +1160,22 @@ class Lexer:
 
         self.advance()
 
-        while self.peek() and self.peek() not in '\'"\n':
-            self.peek()
-            if ord(self.peek()) < 128:
+        # Strings may contain any ASCII chars except an unescaped double quote (")
+        # Escape sequences begin with backslash; we keep them as two characters
+        # so later phases (semantic/interpreter) can validate/interpret them.
+        while self.peek() and self.peek() != "\n":
+            ch = self.peek()
+            # Handle escapes like \" \\ \n \t \@ etc.
+            if ch == "\\" and self.peek(1) and self.peek(1) != "\n":
+                # keep both characters in token value
+                string_content += self.advance()
+                if self.peek():
+                    string_content += self.advance()
+                continue
+            # End of string on unescaped "
+            if ch == '"':
+                break
+            if ord(ch) < 128:
                 string_content += self.advance()
             else:
                 self.advance()
