@@ -179,6 +179,7 @@ def run_code():
         'all_tokens': tokens_dict,
         'lexical_errors': [],
         'syntax_errors': [],
+        'ast': ast.to_dict() if ast else None,
         'semantic_errors': [],
         'semantic_warnings': semantic_warnings,
         'terminal': term,
