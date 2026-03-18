@@ -459,6 +459,10 @@
                         return;
                     }
 
+                    if (data.ast) {
+                        console.log('AST:', data.ast);
+                    }
+
                     if (data && data.terminal && typeof data.terminal === 'object') {
                         terminalSessionId = data.terminal.session_id || null;
                         renderTerminal(data.terminal);
