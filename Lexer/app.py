@@ -3,7 +3,10 @@ import uuid
 from lexer import Lexer
 from parser import Parser
 from semantic import SemanticAnalyzer
-from interpreter import Interpreter, InterpreterError
+from interpreter import InterpreterError
+from tac import TACGenerator
+from tac_vm import TACVM
+from codegen_c import generate_c_program
 
 app = Flask(__name__)
 
@@ -148,11 +151,26 @@ def run_code():
         })
 
     session_id = uuid.uuid4().hex
-    interp = Interpreter(analyzer, valid_tokens)
+    interp = TACVM(analyzer, valid_tokens)
 
     runtime_errors = []
+    tac_strings = []
     try:
-        interp.run(ast)
+        tac_code = TACGenerator(ast, analyzer).generate()
+        print("\n===== TAC START =====")
+        for idx, instr in enumerate(tac_code):
+            print(f"{idx:04d}: {instr}")
+        print("===== TAC END =====\n")
+
+        # Also return TAC to the browser so it can be logged in the console.
+        tac_strings = [str(instr) for instr in tac_code]
+
+        c_code = generate_c_program(tac_code, analyzer)
+        print("\n===== C CODE START =====")
+        print(c_code)
+        print("===== C CODE END =====\n")
+
+        interp.run_tac(tac_code)
     except InterpreterError as e:
         runtime_errors.append(e.to_dict())
     except Exception as e:
@@ -180,6 +198,7 @@ def run_code():
         'lexical_errors': [],
         'syntax_errors': [],
         'ast': ast.to_dict() if ast else None,
+        'tac': tac_strings,
         'semantic_errors': [],
         'semantic_warnings': semantic_warnings,
         'terminal': term,
