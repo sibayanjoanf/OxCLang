@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from parser import ASTNode
 
-from interpreter import Interpreter, coerce_switch_case_literal
+from interpreter import coerce_switch_case_literal
 
 
 @dataclass
@@ -30,7 +30,7 @@ class TACInstr:
             return f"({self.op}, {_fmt(self.result)})"
         if self.op == "IF_TRUE_GOTO":
             return f"(IF_TRUE_GOTO, {_fmt(self.arg1)}, {_fmt(self.result)})"
-        if self.op in {"ASSIGN", "INHALE", "EXHALE", "INCDEC", "UMINUS"}:
+        if self.op in {"ASSIGN", "INHALE", "EXHALE", "INCDEC", "UMINUS", "LNOT"}:
             return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.result)})"
         if self.op == "DECL_NORM":
             return f"(DECL_NORM, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
@@ -126,6 +126,29 @@ class TACGenerator:
         except Exception:
             return None
         return None
+
+    def _value_node_to_tac_constant(self, v: Any) -> Any:
+        """
+        int_lit / float_lit / yuh / naur from parse_value store lexer text in the AST.
+        Emit Python int/float (and keep yuh/naur) so TACVM does not treat digit strings
+        like string literals (fixes password == \"1234\" vs string variable).
+        """
+        if v in ("yuh", "naur"):
+            return v
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            if v == "yuh" or v == "naur":
+                return v
+            try:
+                if "." in v:
+                    return float(v)
+                return int(v)
+            except ValueError:
+                return v
+        return v
 
     def _is_temp(self, place: Any) -> bool:
         return isinstance(place, str) and place.startswith("t")
@@ -763,7 +786,11 @@ class TACGenerator:
         if getattr(node, "type", None) == "output":
             return self._gen_output_as_value(node)
         if getattr(node, "type", None) == "logic_expr":
-            raise NotImplementedError("Logical negation in TAC expressions not implemented yet")
+            # Parser: primary -> !( <logic_expr> ) — same as Interpreter: not bool(_eval_logic(...))
+            inner = self._gen_expr_value(node)
+            temp = self.ctx.new_temp()
+            self._emit("LNOT", arg1=inner, result=temp, value_type="bool")
+            return temp
         raise NotImplementedError(f"Unsupported primary in TAC: {getattr(node,'type',None)}")
 
     def _gen_negate(self, node: ASTNode) -> Any:
@@ -807,7 +834,7 @@ class TACGenerator:
         if not node.children:
             return 0
         if len(node.children) == 1 and getattr(node.children[0], "type", None) == "value":
-            return node.children[0].value
+            return self._value_node_to_tac_constant(node.children[0].value)
 
         if len(node.children) >= 2:
             concat_node = node.children[0]
@@ -857,13 +884,13 @@ class TACGenerator:
 
             # concat_node might be value (rare in this grammar for expression operands)
             if getattr(concat_node, "type", None) == "value":
-                return concat_node.value
+                return self._value_node_to_tac_constant(concat_node.value)
 
             # char_lit / string_lit in literal → output_content (e.g. char a = 'A'~, string x = "hi"~)
+            # Pass through lexer token text ('"hi"' / "'A'') so TACVM _get_value uses
+            # _literal_to_value; do NOT decode here — digit-only strings would match int path.
             if getattr(concat_node, "type", None) == "output_content":
-                raw = getattr(concat_node, "value", None)
-                interp = Interpreter(self.semantic, tokens=[])
-                return interp._literal_to_value(raw)
+                return getattr(concat_node, "value", None)
 
         raise NotImplementedError(f"Literal operand not supported in TAC: {getattr(node,'type',None)}")
 

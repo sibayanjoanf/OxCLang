@@ -269,6 +269,16 @@ class TACVM:
                     self._set_var(instr.result, res)
                 continue
 
+            if op == "LNOT":
+                # Logical !: match Interpreter._eval_primary for !(logic_expr) -> not bool(inner)
+                value = self._get_value(instr.arg1)
+                res = not bool(value)
+                if self._is_temp(instr.result):
+                    self._set_temp(instr.result, res)
+                else:
+                    self._set_var(instr.result, res)
+                continue
+
             # Binary operations: arithmetic + relational + logical
             # op is one of: + - * / % > < >= <= == != || &&
             if op in {"+", "-", "*", "/", "%", ">", "<", ">=", "<=", "==", "!=", "||", "&&"}:

@@ -296,6 +296,11 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
             rhs = _operand_to_c_expr(instr.arg1)
             lines.append(f"    {dst} = -({rhs});")
             continue
+        if op == "LNOT":
+            dst = instr.result
+            rhs = _operand_to_c_expr(instr.arg1)
+            lines.append(f"    {dst} = !(({rhs}) != 0);")
+            continue
 
         if op in {"DECL_NORM", "ASSIGN_WITH_ACCESS", "INDEX_LOAD", "STORE_INDEX", "CALL", "BUILTIN_CALL"}:
             lines.append(f"    /* {op}: not translated to C in this minimal codegen */")
