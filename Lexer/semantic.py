@@ -93,7 +93,9 @@ class SemanticAnalyzer:
         
         for token in self.tokens:
             if token.type.startswith('id'):
-                token_map[token.value] = (token.line, token.column)
+                # First occurrence wins so diagnostics point to declaration, not last use
+                if token.value not in token_map:
+                    token_map[token.value] = (token.line, token.column)
                 token_map[token.type] = (token.line, token.column)
             elif token.type in (
                 'gust', 'air', 'wind', 'stream', 'resist', 'flow', 'gasp',
@@ -505,11 +507,12 @@ class SemanticAnalyzer:
                         dimensions = self._get_array_dimensions(first_child)
                         self._validate_array_size(first_child, identifier)
                         declared_size = self._get_array_declared_size(first_child)
-                        # VLA rule: if declared_size is not constant (None), initialization is not allowed.
+                        # VLA rule: runtime-sized dimension (e.g. [x]) cannot be initialized at declaration.
+                        # Size-inferred [ ] = { ... } has declared_size None but first dim is size_empty — allowed.
                         if len(norm_dec.children) > 1:
                             array_node = norm_dec.children[1]
                             if array_node.type == 'array' and array_node.children:
-                                if declared_size is None:
+                                if declared_size is None and not self._row_size_first_dim_is_empty(first_child):
                                     line, col = self.get_location(identifier)
                                     actual_name = self.get_actual_name(identifier)
                                     self.error(
@@ -568,7 +571,7 @@ class SemanticAnalyzer:
                             if len(norm_dec.children) > 1:
                                 array_node = norm_dec.children[1]
                                 if array_node.type == 'array' and array_node.children:
-                                    if declared_size is None:
+                                    if declared_size is None and not self._row_size_first_dim_is_empty(first_child):
                                         line, col = self.get_location(identifier)
                                         actual_name = self.get_actual_name(identifier)
                                         self.error(
@@ -2367,6 +2370,17 @@ class SemanticAnalyzer:
         return False
 
     # ====================== Arrays ======================
+
+    def _row_size_first_dim_is_empty(self, row_size_node):
+        """
+        True when the first dimension uses [] with no expression (size_empty).
+        That includes size-inferred 1D (int a[] = {1,2}) and row-inferred 2D (int a[][3] = ...).
+        False when the first dimension has an explicit size expression (including VLA int a[x]).
+        """
+        if not hasattr(row_size_node, 'children') or not row_size_node.children:
+            return False
+        first = row_size_node.children[0]
+        return getattr(first, 'type', None) == 'size_empty'
 
     def _get_array_dimensions(self, row_size_node):
         dimensions = []
