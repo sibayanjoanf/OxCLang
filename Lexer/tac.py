@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from parser import ASTNode
 
-from interpreter import coerce_switch_case_literal
+from interpreter import Interpreter, coerce_switch_case_literal
 
 
 @dataclass
@@ -858,6 +858,12 @@ class TACGenerator:
             # concat_node might be value (rare in this grammar for expression operands)
             if getattr(concat_node, "type", None) == "value":
                 return concat_node.value
+
+            # char_lit / string_lit in literal → output_content (e.g. char a = 'A'~, string x = "hi"~)
+            if getattr(concat_node, "type", None) == "output_content":
+                raw = getattr(concat_node, "value", None)
+                interp = Interpreter(self.semantic, tokens=[])
+                return interp._literal_to_value(raw)
 
         raise NotImplementedError(f"Literal operand not supported in TAC: {getattr(node,'type',None)}")
 
