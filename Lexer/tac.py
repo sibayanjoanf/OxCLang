@@ -491,14 +491,36 @@ class TACGenerator:
         self._emit("ASSIGN", arg1=init_place, result=vid)
 
     def _gen_for_vals_as_place(self, node: ASTNode) -> Any:
-        # for_vals can be int_lit/float_lit/char_lit or id<id_access>
-        if getattr(node, "type", None) == "for_vals":
-            return node.value
-        # In this parser, for_vals node is sometimes ASTNode('for_vals', value=lit.value)
-        if hasattr(node, "value"):
-            return node.value
-        # Fallback: treat as expression
-        return self._gen_expr_value(node)
+        """
+        for_vals → int_lit | float_lit | char_lit | id<id_access>
+
+        Literal form: ASTNode('for_vals', value=...) with no children.
+        Identifier form: ASTNode('for_vals', children=[id_no, id_access]) — value is unset;
+        must load via INDEX_LOAD (dimension may be dimension_empty after `id~` in echo header)
+        or plain identifier token for ASSIGN.
+        """
+        if node is None:
+            return 0
+        if getattr(node, "type", None) != "for_vals":
+            if hasattr(node, "value"):
+                return node.value
+            return self._gen_expr_value(node)
+
+        children = getattr(node, "children", None) or []
+        if len(children) == 0:
+            return getattr(node, "value", None)
+
+        id_no = children[0]
+        vid = getattr(id_no, "value", None)
+        if vid is None:
+            vid = self._identifier_token_type_from_identifier_node(id_no)
+        id_access = children[1] if len(children) > 1 else None
+        dim = self._dimension_node_from_id_access(id_access)
+        if dim is not None:
+            t_load = self.ctx.new_temp()
+            self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=t_load)
+            return t_load
+        return vid
 
     # ---------------- Declarations & assignments ----------------
 
