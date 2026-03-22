@@ -1679,14 +1679,15 @@ class SemanticAnalyzer:
             if child.type == 'switch_opts':
                 if switch_type is not None:
                     case_type = self._get_case_literal_type(child)
-                    if case_type is not None and case_type != switch_type:
+                    if case_type is not None and not self._types_compatible(switch_type, case_type):
                         line, col = self.get_node_location(child)
                         if (line, col) == (0, 0) and hasattr(child, 'value'):
                             line, col = self.get_literal_location(child.value)
                         actual_switch = self.get_actual_name(switch_var) if switch_var else 'stream'
                         self.error(
                             f"Stream (switch) case type mismatch: variable '{actual_switch}' is '{switch_type}', "
-                            f"but case value is '{case_type}'. Case literals must match the stream variable type.",
+                            f"but case value is '{case_type}'. Case literal must be implicitly convertible to the "
+                            f"stream variable type (same rules as assignment).",
                             line, col,
                         )
             elif child.type == 'stmt_list':

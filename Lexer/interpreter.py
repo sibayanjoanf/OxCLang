@@ -548,11 +548,14 @@ class Interpreter:
             switch_val = self._lookup(vid)
         matched = False
         cur = switch_cases_node
+        switch_dtype = self._lookup_declared_type(vid)
         while cur and getattr(cur, "type", None) == "switch_cases":
             case_raw = cur.children[0].value
             # Normalize case constant using literal semantics so both int and char
             # cases compare correctly against the runtime switch value.
             case_const = self._literal_to_value(case_raw)
+            # Apply same implicit conversions as assignment (e.g. char case vs int variable → ASCII).
+            case_const = self._coerce_to(switch_dtype, case_const)
             stmt_list = cur.children[1]
             if switch_val == case_const:
                 matched = True
@@ -1740,3 +1743,13 @@ class Interpreter:
                 return False
             return True
         return txt
+
+
+def coerce_switch_case_literal(semantic_analyzer: Any, literal_raw: Any, switch_dtype: str) -> Any:
+    """
+    Coerce a stream case literal to the switch variable's declared type (same rules as assignment).
+    Shared by TAC generator; must match Interpreter._exec_switch_stat.
+    """
+    interp = Interpreter(semantic_analyzer, tokens=[])
+    base = interp._literal_to_value(literal_raw)
+    return interp._coerce_to(switch_dtype, base)

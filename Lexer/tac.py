@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from parser import ASTNode
 
+from interpreter import coerce_switch_case_literal
+
 
 @dataclass
 class TACInstr:
@@ -317,6 +319,10 @@ class TACGenerator:
         else:
             switch_place = vid
 
+        switch_type: Optional[str] = None
+        if self.semantic is not None:
+            switch_type = getattr(self.semantic, "declared_types", {}).get(vid)
+
         cases: List[Tuple[Any, ASTNode]] = []
         cur: Optional[ASTNode] = switch_cases_node
         while cur is not None and getattr(cur, "type", None) == "switch_cases":
@@ -336,7 +342,10 @@ class TACGenerator:
 
         for (case_val, _), L_case in zip(cases, case_labels):
             t = self.ctx.new_temp()
-            self._emit("==", arg1=switch_place, arg2=case_val, result=t, value_type=None)
+            cmp_rhs: Any = case_val
+            if switch_type is not None and self.semantic is not None:
+                cmp_rhs = coerce_switch_case_literal(self.semantic, case_val, switch_type)
+            self._emit("==", arg1=switch_place, arg2=cmp_rhs, result=t, value_type=None)
             self._emit("IF_TRUE_GOTO", arg1=t, result=L_case)
 
         if L_default is not None:
