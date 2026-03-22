@@ -536,7 +536,16 @@ class Interpreter:
     def _exec_switch_stat(self, node, resume_child_index: int = 0) -> Any:
         # switch_stat: [id_no, id_access_node, switch_cases_node, switch_def_node]
         id_no, id_access_node, switch_cases_node, switch_def_node = node.children[0], node.children[1], node.children[2], node.children[3]
-        switch_val = self._lookup(id_no.value)
+        vid = id_no.value
+        dim = None
+        if id_access_node and getattr(id_access_node, "children", None):
+            first = id_access_node.children[0]
+            if getattr(first, "type", None) == "dimension":
+                dim = first
+        if dim is not None:
+            switch_val = self.read_indexed_value(vid, dim)
+        else:
+            switch_val = self._lookup(vid)
         matched = False
         cur = switch_cases_node
         while cur and getattr(cur, "type", None) == "switch_cases":
@@ -1638,6 +1647,9 @@ class Interpreter:
             if value is None or value == "":
                 return 0
             if isinstance(value, str):
+                # Spec: char -> int uses ASCII (single character).
+                if len(value) == 1:
+                    return ord(value)
                 try:
                     return int(float(value))
                 except (ValueError, TypeError):

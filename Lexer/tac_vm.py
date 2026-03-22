@@ -138,6 +138,13 @@ class TACVM:
             return self._temps.get(operand)
         if isinstance(operand, str) and operand.startswith("id"):
             return self.runtime._lookup(operand)
+        # Lexer token text for char_lit / string_lit (e.g. "'B'" vs runtime "B" from INDEX_LOAD).
+        # Must use Interpreter._literal_to_value or stream cases never match.
+        if isinstance(operand, str) and len(operand) >= 2:
+            if operand[0] == "'" and operand[-1] == "'":
+                return self.runtime._literal_to_value(operand)
+            if operand[0] == '"' and operand[-1] == '"':
+                return self.runtime._literal_to_value(operand)
         return self._normalize_literal(operand)
 
     def _set_var(self, vid: str, value: Any) -> None:
@@ -214,6 +221,16 @@ class TACVM:
                 func_id_token_type = instr.arg1
                 param_opts_node = instr.arg2
                 value = self.runtime._call_user_function(func_id_token_type, param_opts_node)
+                dst = instr.result
+                if self._is_temp(dst):
+                    self._set_temp(dst, value)
+                else:
+                    self._set_var(dst, value)
+                continue
+
+            if op == "BUILTIN_CALL":
+                # arg1 = function_call AST (toRise, waft, horizon, sizeOf, ...)
+                value = self.runtime._eval_function_call(instr.arg1)
                 dst = instr.result
                 if self._is_temp(dst):
                     self._set_temp(dst, value)

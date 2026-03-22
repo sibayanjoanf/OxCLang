@@ -38,6 +38,8 @@ class TACInstr:
             return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
         if self.op == "CALL":
             return f"(CALL, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
+        if self.op == "BUILTIN_CALL":
+            return f"(BUILTIN_CALL, {_fmt(self.arg1)}, {_fmt(self.result)})"
         # Default: treat as binary-op-like instruction
         return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
 
@@ -74,6 +76,7 @@ class TACGenerator:
     - 1D/2D array declarations (row_size), element read/write and += etc.
     - inhale into scalar or array element (inhale(arr[i]))
     - do { } cycle (cond) (do-while)
+    - predefined builtins in expressions (BUILTIN_CALL → Interpreter._eval_function_call)
     - inhale/exhale for interactive I/O
     """
 
@@ -298,12 +301,21 @@ class TACGenerator:
         if not node.children or len(node.children) < 4:
             return
         id_no = node.children[0]
+        id_access_node = node.children[1]
         switch_cases_node = node.children[2]
         switch_def_node = node.children[3]
 
         vid = getattr(id_no, "value", None)
         if vid is None:
             raise ValueError("switch_stat missing identifier")
+
+        dim = self._dimension_node_from_id_access(id_access_node)
+        if dim is not None:
+            t_sw = self.ctx.new_temp()
+            self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=t_sw)
+            switch_place: Any = t_sw
+        else:
+            switch_place = vid
 
         cases: List[Tuple[Any, ASTNode]] = []
         cur: Optional[ASTNode] = switch_cases_node
@@ -324,7 +336,7 @@ class TACGenerator:
 
         for (case_val, _), L_case in zip(cases, case_labels):
             t = self.ctx.new_temp()
-            self._emit("==", arg1=vid, arg2=case_val, result=t, value_type=None)
+            self._emit("==", arg1=switch_place, arg2=case_val, result=t, value_type=None)
             self._emit("IF_TRUE_GOTO", arg1=t, result=L_case)
 
         if L_default is not None:
@@ -825,7 +837,14 @@ class TACGenerator:
                                 return temp
                     return self._identifier_token_type_from_identifier_node(single)
                 if getattr(single, "type", None) == "function_call":
-                    raise NotImplementedError("Function call expressions not supported in TAC yet")
+                    temp = self.ctx.new_temp()
+                    self._emit(
+                        "BUILTIN_CALL",
+                        arg1=single,
+                        result=temp,
+                        value_type=self._infer_type(single),
+                    )
+                    return temp
 
             # concat_node might be value (rare in this grammar for expression operands)
             if getattr(concat_node, "type", None) == "value":

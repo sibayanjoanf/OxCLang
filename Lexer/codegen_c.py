@@ -297,7 +297,7 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
             lines.append(f"    {dst} = -({rhs});")
             continue
 
-        if op in {"DECL_NORM", "ASSIGN_WITH_ACCESS", "INDEX_LOAD", "STORE_INDEX", "CALL"}:
+        if op in {"DECL_NORM", "ASSIGN_WITH_ACCESS", "INDEX_LOAD", "STORE_INDEX", "CALL", "BUILTIN_CALL"}:
             lines.append(f"    /* {op}: not translated to C in this minimal codegen */")
             continue
 
