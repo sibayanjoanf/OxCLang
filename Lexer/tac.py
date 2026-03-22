@@ -30,6 +30,14 @@ class TACInstr:
             return f"(IF_TRUE_GOTO, {_fmt(self.arg1)}, {_fmt(self.result)})"
         if self.op in {"ASSIGN", "INHALE", "EXHALE", "INCDEC", "UMINUS"}:
             return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.result)})"
+        if self.op == "DECL_NORM":
+            return f"(DECL_NORM, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
+        if self.op == "ASSIGN_WITH_ACCESS":
+            return f"(ASSIGN_WITH_ACCESS, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
+        if self.op in {"INDEX_LOAD", "STORE_INDEX"}:
+            return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
+        if self.op == "CALL":
+            return f"(CALL, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
         # Default: treat as binary-op-like instruction
         return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
 
@@ -61,6 +69,11 @@ class TACGenerator:
     - relational conditions (>, <, >=, <=, ==, !=)
     - for-loop / echo blocks (parser mislabels them as while_loop with 4 children)
     - while loops (cycle(...){...})
+    - if / elseif / else
+    - stream (switch) with case / diffuse
+    - 1D/2D array declarations (row_size), element read/write and += etc.
+    - inhale into scalar or array element (inhale(arr[i]))
+    - do { } cycle (cond) (do-while)
     - inhale/exhale for interactive I/O
     """
 
@@ -187,6 +200,7 @@ class TACGenerator:
                 "input_output",
                 "identifier_stat",
                 "iteration",
+                "conditioner",
             }:
                 self._gen_statement(ASTNode("statement", children=[node]))
             return
@@ -205,10 +219,130 @@ class TACGenerator:
         elif t == "iteration":
             self._gen_iteration(inner)
         elif t == "conditioner":
-            # Not needed for current test programs
-            raise NotImplementedError("TAC generation for if/stream is not implemented yet")
+            self._gen_conditioner(inner)
         else:
             raise NotImplementedError(f"Unsupported statement node: {t}")
+
+    def _gen_conditioner(self, node: ASTNode) -> None:
+        """conditioner -> if_stat | switch_stat"""
+        if not node.children:
+            return
+        inner = node.children[0]
+        it = getattr(inner, "type", None)
+        if it == "if_stat":
+            self._gen_if_stat(inner)
+        elif it == "switch_stat":
+            self._gen_switch_stat(inner)
+        else:
+            raise NotImplementedError(f"Unsupported conditioner child: {it}")
+
+    def _gen_if_stat(self, node: ASTNode) -> None:
+        # if_stat -> [cond_stat, stmt_ctrl, if_tail]
+        if not node.children or len(node.children) < 3:
+            return
+        cond_stat, stmt_ctrl, if_tail = node.children[0], node.children[1], node.children[2]
+        L_merge = self.ctx.new_label("Lmerge")
+        L_then = self.ctx.new_label("Lthen")
+        L_rest = self.ctx.new_label("Lif")
+
+        cond_place = self._gen_expr_value(cond_stat.children[0])
+        self._emit("IF_TRUE_GOTO", arg1=cond_place, result=L_then)
+        self._emit("GOTO", result=L_rest)
+
+        self._emit("LABEL", result=L_then)
+        self._gen_stmt_ctrl(stmt_ctrl)
+        self._emit("GOTO", result=L_merge)
+
+        self._emit("LABEL", result=L_rest)
+        self._gen_if_tail(if_tail, L_merge)
+
+        self._emit("LABEL", result=L_merge)
+
+    def _gen_if_tail(self, if_tail_node: ASTNode, L_merge: str) -> None:
+        t = getattr(if_tail_node, "type", None)
+        if t == "if_tail_empty":
+            return
+        if t != "if_tail" or not if_tail_node.children:
+            return
+
+        ch = if_tail_node.children
+        if len(ch) == 1:
+            # else { stmt_ctrl }
+            self._gen_stmt_ctrl(ch[0])
+            self._emit("GOTO", result=L_merge)
+            return
+
+        if len(ch) == 3:
+            # elseif (cond) { stmt_ctrl } if_tail
+            cond_stat, stmt_ctrl, next_tail = ch[0], ch[1], ch[2]
+            L_then = self.ctx.new_label("Lthen")
+            L_rest = self.ctx.new_label("Lif")
+
+            cond_place = self._gen_expr_value(cond_stat.children[0])
+            self._emit("IF_TRUE_GOTO", arg1=cond_place, result=L_then)
+            self._emit("GOTO", result=L_rest)
+
+            self._emit("LABEL", result=L_then)
+            self._gen_stmt_ctrl(stmt_ctrl)
+            self._emit("GOTO", result=L_merge)
+
+            self._emit("LABEL", result=L_rest)
+            self._gen_if_tail(next_tail, L_merge)
+            return
+
+        raise NotImplementedError(f"Unexpected if_tail shape: {len(ch)} children")
+
+    def _gen_switch_stat(self, node: ASTNode) -> None:
+        # switch_stat -> [id_no, id_access, switch_cases, switch_def]
+        # Matches interpreter._exec_switch_stat: compare stream variable to case literals.
+        if not node.children or len(node.children) < 4:
+            return
+        id_no = node.children[0]
+        switch_cases_node = node.children[2]
+        switch_def_node = node.children[3]
+
+        vid = getattr(id_no, "value", None)
+        if vid is None:
+            raise ValueError("switch_stat missing identifier")
+
+        cases: List[Tuple[Any, ASTNode]] = []
+        cur: Optional[ASTNode] = switch_cases_node
+        while cur is not None and getattr(cur, "type", None) == "switch_cases":
+            switch_opts = cur.children[0]
+            stmt_list = cur.children[1]
+            case_val = getattr(switch_opts, "value", None)
+            cases.append((case_val, stmt_list))
+            cur = cur.children[2] if len(cur.children) > 2 else None
+
+        L_merge = self.ctx.new_label("Lswm")
+        has_default = getattr(switch_def_node, "type", None) == "switch_def" and getattr(
+            switch_def_node, "children", None
+        )
+
+        case_labels = [self.ctx.new_label("Lcase") for _ in cases]
+        L_default = self.ctx.new_label("Lswdef") if has_default else None
+
+        for (case_val, _), L_case in zip(cases, case_labels):
+            t = self.ctx.new_temp()
+            self._emit("==", arg1=vid, arg2=case_val, result=t, value_type=None)
+            self._emit("IF_TRUE_GOTO", arg1=t, result=L_case)
+
+        if L_default is not None:
+            self._emit("GOTO", result=L_default)
+        else:
+            self._emit("GOTO", result=L_merge)
+
+        for (_, stmt_list), L_case in zip(cases, case_labels):
+            self._emit("LABEL", result=L_case)
+            self._gen_stmt_list(stmt_list)
+            self._emit("GOTO", result=L_merge)
+
+        if L_default is not None:
+            self._emit("LABEL", result=L_default)
+            self._gen_stmt_list(switch_def_node.children[0])
+            self._emit("GOTO", result=L_merge)
+
+        self._emit("LABEL", result=L_merge)
 
     def _gen_iteration(self, node: ASTNode) -> None:
         # iteration -> while_loop
@@ -234,7 +368,11 @@ class TACGenerator:
             # while_loop OR do-while
             first, second = node.children[0], node.children[1]
             if getattr(first, "type", None) == "stmt_ctrl":
-                raise NotImplementedError("do-while not implemented yet")
+                # do { body } cycle (cond)~  →  body runs at least once
+                body = first
+                cond_stat = second
+                self._gen_do_while_form(body, cond_stat)
+                return
             # while: [cond_stat, stmt_ctrl]
             cond_stat = first
             body = second
@@ -285,6 +423,14 @@ class TACGenerator:
         self._emit("GOTO", result=L_start)
         self._emit("LABEL", result=L_end)
 
+    def _gen_do_while_form(self, body: ASTNode, cond_stat: ASTNode) -> None:
+        """do { stmt_ctrl } cycle (cond)~ — body first, then repeat while cond."""
+        L_start = self.ctx.new_label("Ldo")
+        self._emit("LABEL", result=L_start)
+        self._gen_stmt_ctrl(body)
+        cond_place = self._gen_expr_value(cond_stat.children[0])
+        self._emit("IF_TRUE_GOTO", arg1=cond_place, result=L_start)
+
     def _gen_for_init(self, node: ASTNode) -> None:
         # for_init -> [data_type_node, id_no, for_vals]
         # In your parser: ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
@@ -332,8 +478,7 @@ class TACGenerator:
         first_norm_dec = node.children[2]
         first_tail = node.children[3]
 
-        init_place = self._gen_norm_dec_init_place(first_norm_dec, data_type)
-        self._emit("ASSIGN", arg1=init_place, result=first_id)
+        self._gen_emit_norm_declaration(first_id, data_type, first_norm_dec)
         self._gen_norm_tail(first_tail, data_type)
 
     def _gen_norm_tail(self, node: Optional[ASTNode], data_type: str) -> None:
@@ -347,30 +492,42 @@ class TACGenerator:
         vid = node.children[0].value
         norm_dec_node = node.children[1]
         tail_node = node.children[2] if len(node.children) > 2 else None
-        init_place = self._gen_norm_dec_init_place(norm_dec_node, data_type)
-        self._emit("ASSIGN", arg1=init_place, result=vid)
+        self._gen_emit_norm_declaration(vid, data_type, norm_dec_node)
         self._gen_norm_tail(tail_node, data_type)
 
-    def _gen_norm_dec_init_place(self, node: ASTNode, data_type: str) -> Any:
-        if node is None:
-            return self._default_value(data_type)
-        if getattr(node, "type", None) == "norm_dec_empty":
-            return self._default_value(data_type)
-        if getattr(node, "type", None) != "norm_dec":
-            # norm_dec node may be malformed; fallback
-            return self._default_value(data_type)
-
-        # norm_dec children: [row_size,array] or [operator '=', expr] or [norm_dec_empty]
-        if not node.children:
-            return self._default_value(data_type)
-        first = node.children[0]
+    def _gen_emit_norm_declaration(self, vid: str, data_type: str, norm_dec_node: Optional[ASTNode]) -> None:
+        """Emit ASSIGN or DECL_NORM for one identifier in a normal declaration."""
+        if norm_dec_node is None or getattr(norm_dec_node, "type", None) == "norm_dec_empty":
+            self._emit("ASSIGN", arg1=self._default_value(data_type), result=vid)
+            return
+        if getattr(norm_dec_node, "type", None) != "norm_dec":
+            self._emit("ASSIGN", arg1=self._default_value(data_type), result=vid)
+            return
+        if not norm_dec_node.children:
+            self._emit("ASSIGN", arg1=self._default_value(data_type), result=vid)
+            return
+        first = norm_dec_node.children[0]
         if getattr(first, "type", None) == "operator" and getattr(first, "value", None) == "=":
-            expr_node = node.children[1]
-            return self._gen_expr_value(expr_node)
-        # arrays not supported in TAC for now
+            expr_node = norm_dec_node.children[1]
+            rhs = self._gen_expr_value(expr_node)
+            self._emit("ASSIGN", arg1=rhs, result=vid)
+            return
         if getattr(first, "type", None) == "row_size":
-            raise NotImplementedError("Array declarations not supported in this TAC generator yet")
-        return self._default_value(data_type)
+            # Full norm_dec node (row_size + optional array init) — VM uses Interpreter._declare_one
+            self._emit("DECL_NORM", arg1=data_type, arg2=norm_dec_node, result=vid)
+            return
+        self._emit("ASSIGN", arg1=self._default_value(data_type), result=vid)
+
+    def _dimension_node_from_id_access(self, id_access_node: Optional[ASTNode]) -> Optional[ASTNode]:
+        if not id_access_node or not getattr(id_access_node, "children", None):
+            return None
+        first = id_access_node.children[0]
+        if getattr(first, "type", None) == "dimension":
+            return first
+        return None
+
+    def _id_access_has_dimension(self, id_access_node: Optional[ASTNode]) -> bool:
+        return self._dimension_node_from_id_access(id_access_node) is not None
 
     def _gen_identifier_stat(self, node: ASTNode) -> None:
         # Two shapes in this grammar:
@@ -387,11 +544,15 @@ class TACGenerator:
         vid = node.children[0].value
         body = node.children[1]
 
-        # function call statement not supported yet
+        # function call statement form: id(<param_opts>)~
         if body.children and getattr(body.children[0], "type", None) in ("param_opts", "param_opts_empty"):
-            raise NotImplementedError("Function calls in TAC not implemented yet")
+            param_opts_node = body.children[0]
+            temp = self.ctx.new_temp()
+            self._emit("CALL", arg1=vid, arg2=param_opts_node, result=temp)
+            return
 
         # body -> [id_access, id_stat_tail]
+        id_access = body.children[0]
         tail = body.children[1]
         if getattr(tail, "type", None) != "id_stat_tail" or not tail.children:
             return
@@ -405,12 +566,14 @@ class TACGenerator:
 
         # assignment tail: id_stat_tail -> [assignment]
         if getattr(first, "type", None) == "assignment":
-            self._gen_assignment_to_identifier(vid, first)
+            self._gen_assignment_to_identifier(vid, first, id_access=id_access)
             return
 
         raise NotImplementedError(f"Unsupported identifier_stat tail: {getattr(first, 'type', None)}")
 
-    def _gen_assignment_to_identifier(self, vid: str, assignment_node: ASTNode) -> None:
+    def _gen_assignment_to_identifier(
+        self, vid: str, assignment_node: ASTNode, id_access: Optional[ASTNode] = None
+    ) -> None:
         # assignment_node -> [assi_op, expr]
         assi_op_node = assignment_node.children[0]
         expr_node = assignment_node.children[1]
@@ -418,6 +581,21 @@ class TACGenerator:
 
         op = assi_op_node.children[0].value  # '=', '+=', '-=', '*=' ...
         rhs_place = self._gen_expr_value(expr_node)
+
+        dim = self._dimension_node_from_id_access(id_access)
+
+        if dim is not None:
+            if op == "=":
+                self._emit("ASSIGN_WITH_ACCESS", arg1=vid, arg2=id_access, result=assignment_node)
+                return
+            # compound assignment to element: load, combine, store
+            t_load = self.ctx.new_temp()
+            self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=t_load)
+            base_op = {"+=": "+", "-=": "-", "*=": "*", "/=": "/", "%=": "%"}[op]
+            t_new = self.ctx.new_temp()
+            self._emit(base_op, arg1=t_load, arg2=rhs_place, result=t_new, value_type=rhs_type)
+            self._emit("STORE_INDEX", arg1=vid, arg2=dim, result=t_new)
+            return
 
         if op == "=":
             self._emit("ASSIGN", arg1=rhs_place, result=vid)
@@ -435,7 +613,9 @@ class TACGenerator:
         kind = node.children[0]
         if kind == "inhale":
             vid = node.children[1].value
-            self._emit("INHALE", arg1=None, result=vid)
+            id_access = node.children[2] if len(node.children) > 2 else None
+            dim = self._dimension_node_from_id_access(id_access)
+            self._emit("INHALE", arg1=dim, result=vid)
             return
         if kind == "exhale":
             output_node = node.children[1]
@@ -573,7 +753,21 @@ class TACGenerator:
             self._emit("UMINUS", arg1=v, result=temp, value_type=self._infer_type(node))
             return temp
 
-        # negate -> id_no id_access
+        # negate -> id_no id_access (check_id returns id node with .value token type)
+        if len(node.children) >= 2:
+            id_no = node.children[0]
+            id_access = node.children[1]
+            vid = getattr(id_no, "value", None)
+            if vid is None:
+                vid = self._identifier_token_type_from_identifier_node(id_no)
+            dim = self._dimension_node_from_id_access(id_access)
+            if dim is not None:
+                t_load = self.ctx.new_temp()
+                self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=t_load)
+                temp = self.ctx.new_temp()
+                self._emit("UMINUS", arg1=t_load, result=temp, value_type=self._infer_type(node))
+                return temp
+
         vid_node = node.children[0]
         vid = self._identifier_token_type_from_identifier_node(vid_node)
         temp = self.ctx.new_temp()
@@ -607,6 +801,28 @@ class TACGenerator:
                     return 0
                 single = concat_node.children[0]
                 if getattr(single, "type", None) == "identifier":
+                    # identifier -> id id_tail: function call, array index, or plain variable
+                    if (
+                        getattr(single, "children", None)
+                        and len(single.children) >= 2
+                        and getattr(single.children[1], "type", None) == "id_tail"
+                        and getattr(single.children[1], "children", None)
+                        and single.children[1].children
+                    ):
+                        tail0 = single.children[1].children[0]
+                        if getattr(tail0, "type", None) in ("param_opts", "param_opts_empty"):
+                            func_id_token_type = single.children[0].value
+                            param_opts_node = tail0
+                            temp = self.ctx.new_temp()
+                            self._emit("CALL", arg1=func_id_token_type, arg2=param_opts_node, result=temp)
+                            return temp
+                        if getattr(tail0, "type", None) == "id_access":
+                            dim = self._dimension_node_from_id_access(tail0)
+                            if dim is not None:
+                                vid = single.children[0].value
+                                temp = self.ctx.new_temp()
+                                self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=temp)
+                                return temp
                     return self._identifier_token_type_from_identifier_node(single)
                 if getattr(single, "type", None) == "function_call":
                     raise NotImplementedError("Function call expressions not supported in TAC yet")

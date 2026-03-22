@@ -26,6 +26,8 @@ class ReturnSignal(RuntimeSignal):
 class InputRequest:
     target_identifier: str  # identifier token-type, e.g. "id3"
     prompt: str = ""
+    # If set, inhale targets arr[i] / arr[r][c] (AST node type 'dimension').
+    dimension_node: Any = None
 
 
 class InterpreterError(Exception):
@@ -91,7 +93,11 @@ class Interpreter:
         # Echo the raw input so the transcript keeps the full history
         # (prompt from exhale + this line of input).
         self.emit(str(user_text) + "\n")
-        self._assign(target_id, value)
+        dim = getattr(self.input_request, "dimension_node", None)
+        if dim is not None:
+            self.assign_indexed_value(target_id, dim, value)
+        else:
+            self._assign(target_id, value)
 
         self.waiting_for_input = False
         self.input_request = None
@@ -504,8 +510,15 @@ class Interpreter:
             vid = getattr(id_node, "value", None)
             if vid is None:
                 return None
+            dim = None
+            if len(node.children) > 2:
+                id_access = node.children[2]
+                if id_access and getattr(id_access, "children", None):
+                    first = id_access.children[0]
+                    if getattr(first, "type", None) == "dimension":
+                        dim = first
             self.waiting_for_input = True
-            self.input_request = InputRequest(target_identifier=vid, prompt="")
+            self.input_request = InputRequest(target_identifier=vid, prompt="", dimension_node=dim)
             return None
         if kind == "exhale":
             out_node = node.children[1]
@@ -1146,6 +1159,64 @@ class Interpreter:
                         return val[r][c]
         # plain variable reference
         return self._lookup(id_no)
+
+    def read_indexed_value(self, id_token_type: str, dimension_node) -> Any:
+        """
+        Read an array element for TAC INDEX_LOAD. dimension_node is the AST 'dimension'
+        inside id_access (same as _eval_identifier).
+        """
+        if dimension_node is None or getattr(dimension_node, "type", None) != "dimension":
+            return self._lookup(id_token_type)
+        indices = self._eval_dimension_indices(dimension_node)
+        val = self._lookup(id_token_type)
+        if not indices:
+            return val
+        if not isinstance(val, list):
+            raise InterpreterError(f"'{self.semantic.get_actual_name(id_token_type)}' is not an array")
+        if len(indices) == 1:
+            i = indices[0]
+            if i < 0 or i >= len(val):
+                raise InterpreterError("Array out of bounds")
+            return val[i]
+        if len(indices) == 2:
+            r, c = indices
+            if r < 0 or r >= len(val) or not isinstance(val[r], list):
+                raise InterpreterError("Array out of bounds")
+            if c < 0 or c >= len(val[r]):
+                raise InterpreterError("Array out of bounds")
+            return val[r][c]
+        return val
+
+    def assign_indexed_value(self, id_token_type: str, dimension_node, value: Any) -> None:
+        """
+        Write an array element for TAC STORE_INDEX. dimension_node is AST 'dimension'.
+        """
+        if dimension_node is None or getattr(dimension_node, "type", None) != "dimension":
+            self._assign(id_token_type, self._coerce_to(self._lookup_declared_type(id_token_type), value))
+            return
+        indices = self._eval_dimension_indices(dimension_node)
+        if not indices:
+            self._assign(id_token_type, self._coerce_to(self._lookup_declared_type(id_token_type), value))
+            return
+        arr = self._lookup(id_token_type)
+        if not isinstance(arr, list):
+            raise InterpreterError(f"'{self.semantic.get_actual_name(id_token_type)}' is not an array")
+        dtype = self._lookup_declared_type(id_token_type)
+        coerced = self._coerce_to(dtype, value)
+        if len(indices) == 1:
+            i = indices[0]
+            if i < 0 or i >= len(arr):
+                raise InterpreterError("Array out of bounds")
+            arr[i] = coerced
+            return
+        if len(indices) == 2:
+            r, c = indices
+            if r < 0 or r >= len(arr) or not isinstance(arr[r], list):
+                raise InterpreterError("Array out of bounds")
+            if c < 0 or c >= len(arr[r]):
+                raise InterpreterError("Array out of bounds")
+            arr[r][c] = coerced
+            return
 
     def _eval_function_call(self, node) -> Any:
         """Evaluate predefined built-in: toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft."""

@@ -259,6 +259,9 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
             continue
         if op == "INHALE":
             vid = instr.result
+            if instr.arg1 is not None:
+                lines.append("    /* INHALE into array element: not translated in minimal codegen */")
+                continue
             dtype = declared_types.get(vid, "int")
             fmt = _c_scanf_for(dtype)
             if dtype in ("string",):
@@ -292,6 +295,10 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
             dst = instr.result
             rhs = _operand_to_c_expr(instr.arg1)
             lines.append(f"    {dst} = -({rhs});")
+            continue
+
+        if op in {"DECL_NORM", "ASSIGN_WITH_ACCESS", "INDEX_LOAD", "STORE_INDEX", "CALL"}:
+            lines.append(f"    /* {op}: not translated to C in this minimal codegen */")
             continue
 
         # Binary operations are emitted directly with op set to '+', '-', '*', '/', '>', ...

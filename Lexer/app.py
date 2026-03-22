@@ -151,7 +151,7 @@ def run_code():
         })
 
     session_id = uuid.uuid4().hex
-    interp = TACVM(analyzer, valid_tokens)
+    interp = TACVM(analyzer, valid_tokens, ast_root=ast)
 
     runtime_errors = []
     tac_strings = []

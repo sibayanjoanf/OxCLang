@@ -25,9 +25,10 @@ class TACVM:
       - input conversion for inhale
     """
 
-    def __init__(self, semantic_analyzer: Any, tokens: Optional[list] = None):
+    def __init__(self, semantic_analyzer: Any, tokens: Optional[list] = None, ast_root: Optional[Any] = None):
         self.semantic = semantic_analyzer
         self.tokens = tokens or []
+        self.ast_root = ast_root
 
         # Reuse existing runtime semantics for expression fragments we don't
         # re-implement here (notably output strings).
@@ -65,6 +66,16 @@ class TACVM:
         self.runtime.output = []
         self.output = self.runtime.output
 
+        # Index user-defined functions so runtime._call_user_function works.
+        if self.ast_root is not None:
+            self.runtime._index_functions(self.ast_root)
+            # Initialize global declarations before TAC execution so universal
+            # variables/constants are available to CALLed functions.
+            if getattr(self.ast_root, "children", None) and len(self.ast_root.children) > 0:
+                global_dec_node = self.ast_root.children[0]
+                if getattr(global_dec_node, "type", None) == "global_dec":
+                    self.runtime._exec(global_dec_node)
+
         self._execute_until_pause_or_end()
 
     def provide_input(self, user_text: str) -> None:
@@ -75,10 +86,14 @@ class TACVM:
         expected_type = self.runtime._lookup_declared_type(vid)
         value = self.runtime._convert_input(user_text, expected_type)
 
-        self.runtime._assign(vid, value)
-
-        # Echo raw input (matches your interpreter transcript behavior)
+        # Echo raw input (matches interpreter: transcript line before store)
         self.runtime.emit(str(user_text) + "\n")
+
+        dim = self.input_request.dimension_node if self.input_request else None
+        if dim is not None:
+            self.runtime.assign_indexed_value(vid, dim, value)
+        else:
+            self.runtime._assign(vid, value)
 
         self.waiting_for_input = False
         self.input_request = None
@@ -165,9 +180,10 @@ class TACVM:
 
             if op == "INHALE":
                 vid = instr.result
+                dim = instr.arg1  # AST 'dimension' or None for scalar inhale
                 self.waiting_for_input = True
                 self._target_identifier = vid
-                self.input_request = InputRequest(target_identifier=vid, prompt="")
+                self.input_request = InputRequest(target_identifier=vid, prompt="", dimension_node=dim)
                 return
 
             if op == "EXHALE":
@@ -191,6 +207,40 @@ class TACVM:
                 else:
                     raise TACExecutionError(f"Unsupported INCDEC op: {inc_op}")
                 self._set_var(vid, new_val)
+                continue
+
+            if op == "CALL":
+                # CALL: arg1=function_id_token_type, arg2=param_opts node, result=temp/var
+                func_id_token_type = instr.arg1
+                param_opts_node = instr.arg2
+                value = self.runtime._call_user_function(func_id_token_type, param_opts_node)
+                dst = instr.result
+                if self._is_temp(dst):
+                    self._set_temp(dst, value)
+                else:
+                    self._set_var(dst, value)
+                continue
+
+            if op == "DECL_NORM":
+                # arg1=data_type, arg2=norm_dec AST, result=identifier token type
+                self.runtime._declare_one(instr.result, instr.arg1, instr.arg2)
+                continue
+
+            if op == "ASSIGN_WITH_ACCESS":
+                # arg1=vid, arg2=id_access node, result=assignment AST
+                self.runtime._exec_assignment_with_access(instr.arg1, instr.arg2, instr.result)
+                continue
+
+            if op == "INDEX_LOAD":
+                # arg1=vid, arg2=dimension AST, result=temp
+                val = self.runtime.read_indexed_value(instr.arg1, instr.arg2)
+                self._set_temp(instr.result, val)
+                continue
+
+            if op == "STORE_INDEX":
+                # arg1=vid, arg2=dimension AST, result=value operand (usually temp)
+                val = self._get_value(instr.result)
+                self.runtime.assign_indexed_value(instr.arg1, instr.arg2, val)
                 continue
 
             if op == "UMINUS":
