@@ -644,7 +644,7 @@
 
         // Save button
         
-        const validFilename = /^[a-zA-Z0-9][a-zA-Z0-9._\- ]*$/;
+        const validFilename = /^[^/\\:*?"<>|]+$/;
 
         filenameInput.addEventListener('input', () => {
             const val = filenameInput.value;
