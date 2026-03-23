@@ -1,0 +1,42 @@
+atmosphere(){
+  int choice~
+  float radius, base, height, side, length, width~
+
+  exhale("(1) Circle | (2) Triangle | (3) Square | (4) Rectangle\n")~
+  exhale("Get the area of (1-4): ")~
+  inhale(choice)~
+
+  stream(choice){
+    case 1:
+      exhale("Enter radius: ")~
+      inhale(radius)~
+      float circle = 3.14 * (radius * radius)~
+      exhale("The area of the circle is @{circle}")~
+      resist~
+    case 2:
+      exhale("Enter base: ")~
+      inhale(base)~
+      exhale("Enter height: ")~
+      inhale(height)~
+      float triangle = (base * height) / 2~
+      exhale("The area of the triangle is @{triangle}")~
+      resist~
+    case 3:
+      exhale("Enter side: ")~
+      inhale(side)~
+      float square = side * side~
+      exhale("The area of the square is @{square}")~
+      resist~
+    case 4:
+      exhale("Enter length: ")~
+      inhale(length)~
+      exhale("Enter width: ")~
+      inhale(width)~
+      float rectangle = length * width~
+      exhale("The area of the rectangle is @{rectangle}")~
+      resist~
+    diffuse:
+      exhale("Invalid choice.")~
+      resist~
+  }
+}

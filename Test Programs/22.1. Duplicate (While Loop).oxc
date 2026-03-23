@@ -1,0 +1,26 @@
+atmosphere(){
+    int arr[100]~
+    int size = 0~
+    int num~
+    bool duplicate = naur~
+
+    cycle(duplicate == naur){
+        exhale("Enter number: ")~
+        inhale(num)~
+
+        int i = 0~
+        cycle(i < size){
+            if (arr[i] == num){
+                duplicate = yuh~
+            }
+            i++~
+        }
+
+        if (!(duplicate)){
+            arr[size] = num~
+            size++~
+        }
+    }
+
+    exhale("Duplicate detected!")~
+}

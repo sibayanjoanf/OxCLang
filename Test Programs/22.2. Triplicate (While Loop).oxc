@@ -1,0 +1,30 @@
+atmosphere(){
+    int arr[100]~
+    int size = 0~
+    int num~
+    bool found = naur~
+
+    cycle(found == naur){
+        exhale("Enter number: ")~
+        inhale(num)~
+
+        int count = 0~
+        int i = 0~
+
+        cycle(i < size){
+            if (arr[i] == num){
+                count = count + 1~
+            }
+            i++~
+        }
+
+        if (count == 2){
+            found = yuh~
+        }
+
+        arr[size] = num~
+        size++~
+    }
+
+    exhale("Triplicate detected!")~
+}

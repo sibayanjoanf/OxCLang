@@ -1,0 +1,49 @@
+atmosphere(){
+    string username~
+
+    cycle(yuh){
+        exhale("Enter username: ")~
+        inhale(username)~
+
+        if (horizon(username) < 8){
+            exhale("Must be at least 8 characters.")~
+            flow~
+        }
+
+        bool hasUpper = naur~
+        bool hasNumber = naur~
+        bool hasSpecial = naur~
+
+        int i = 0~
+
+        cycle(i < horizon(username)){
+            char c = username[i]~
+
+            // uppercase check
+            if (c >= 'A' && c <= 'Z'){
+                hasUpper = yuh~
+            }
+
+            // number check
+            if (c >= '0' && c <= '9'){
+                hasNumber = yuh~
+            }
+
+            // special character check
+            if (!( (c >= 'A' && c <= 'Z') || 
+                   (c >= 'a' && c <= 'z') || 
+                   (c >= '0' && c <= '9') )){
+                hasSpecial = yuh~
+            }
+
+            i++~
+        }
+
+        if (hasUpper && hasNumber && hasSpecial){
+            exhale("Strong username!")~
+            resist~
+        } else {
+            exhale("Must contain uppercase, number, and special character.")~
+        }
+    }
+}

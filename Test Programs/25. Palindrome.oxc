@@ -1,0 +1,27 @@
+atmosphere(){
+    string input~
+    string str~
+    bool isPalindrome = yuh~
+
+    exhale("Enter a number or word: ")~
+    inhale(input)~
+
+    str = toString(input)~
+
+    int start = 0~
+    int end = horizon(str) - 1~
+
+    cycle(start < end){
+        if (str[start] != str[end]){
+            isPalindrome = naur~
+        }
+        start++~
+        end--~
+    }
+
+    if (isPalindrome){
+        exhale("Palindrome")~
+    } else {
+        exhale("Not Palindrome")~
+    }
+}

@@ -1,0 +1,22 @@
+air int countDigits(int n){
+    if (n == 0){
+        gasp 0~
+    }
+
+    if (n < 10){
+        gasp 1~
+    }
+
+    gasp 1 + countDigits(n / 10)~
+}
+
+atmosphere(){
+    int num~
+
+    exhale("Enter number: ")~
+    inhale(num)~
+
+    int result = countDigits(num)~
+
+    exhale("Digits: @{result}")~
+}

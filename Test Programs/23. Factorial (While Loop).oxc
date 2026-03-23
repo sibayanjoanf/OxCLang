@@ -1,0 +1,20 @@
+atmosphere(){
+    int n~
+    int result = 1~
+    int i = 1~
+
+    exhale("Enter a positive number: ")~
+    inhale(n)~
+
+    if(n>=0){
+      cycle(i <= n){
+          result = result * i~
+          i++~
+      }
+      exhale("Factorial: @{result}")~
+    }  else {
+      exhale("Invalid input.")~
+    }
+
+    
+}
