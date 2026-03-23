@@ -861,58 +861,78 @@ class TACGenerator:
         if len(node.children) >= 2:
             concat_node = node.children[0]
             tail_node = node.children[1]
-            # For numeric/boolean operands in arithmetic, tail is expected to be empty.
+            # output_tail represents '&' concatenation. Lower to chained '+' TAC ops.
             if getattr(tail_node, "type", None) != "output_tail_empty":
-                raise NotImplementedError("String concatenation in arithmetic expressions not supported in TAC yet")
-
-            # concat_node might be ASTNode('output', [identifier/function_call]) for identifiers
-            if getattr(concat_node, "type", None) == "output":
-                if not concat_node.children:
-                    return 0
-                single = concat_node.children[0]
-                if getattr(single, "type", None) == "identifier":
-                    # identifier -> id id_tail: function call, array index, or plain variable
-                    if (
-                        getattr(single, "children", None)
-                        and len(single.children) >= 2
-                        and getattr(single.children[1], "type", None) == "id_tail"
-                        and getattr(single.children[1], "children", None)
-                        and single.children[1].children
-                    ):
-                        tail0 = single.children[1].children[0]
-                        if getattr(tail0, "type", None) in ("param_opts", "param_opts_empty"):
-                            func_id_token_type = single.children[0].value
-                            param_opts_node = tail0
-                            temp = self.ctx.new_temp()
-                            self._emit("CALL", arg1=func_id_token_type, arg2=param_opts_node, result=temp)
-                            return temp
-                        if getattr(tail0, "type", None) == "id_access":
-                            dim = self._dimension_node_from_id_access(tail0)
-                            if dim is not None:
-                                vid = single.children[0].value
-                                temp = self.ctx.new_temp()
-                                self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=temp)
-                                return temp
-                    return self._identifier_token_type_from_identifier_node(single)
-                if getattr(single, "type", None) == "function_call":
+                operands: List[Any] = [self._gen_output_concat_piece_as_value(concat_node)]
+                self._collect_output_tail_operands(tail_node, operands)
+                acc = operands[0]
+                for piece in operands[1:]:
                     temp = self.ctx.new_temp()
-                    self._emit(
-                        "BUILTIN_CALL",
-                        arg1=single,
-                        result=temp,
-                        value_type=self._infer_type(single),
-                    )
-                    return temp
+                    self._emit("+", arg1=acc, arg2=piece, result=temp, value_type="string")
+                    acc = temp
+                return acc
 
-            # concat_node might be value (rare in this grammar for expression operands)
-            if getattr(concat_node, "type", None) == "value":
-                return self._value_node_to_tac_constant(concat_node.value)
-
-            # char_lit / string_lit in literal → output_content (e.g. char a = 'A'~, string x = "hi"~)
-            # Pass through lexer token text ('"hi"' / "'A'') so TACVM _get_value uses
-            # _literal_to_value; do NOT decode here — digit-only strings would match int path.
-            if getattr(concat_node, "type", None) == "output_content":
-                return getattr(concat_node, "value", None)
+            return self._gen_output_concat_piece_as_value(concat_node)
 
         raise NotImplementedError(f"Literal operand not supported in TAC: {getattr(node,'type',None)}")
+
+    def _collect_output_tail_operands(self, node: ASTNode, out: List[Any]) -> None:
+        if getattr(node, "type", None) != "output_tail":
+            return
+        if not getattr(node, "children", None) or len(node.children) < 2:
+            return
+        out.append(self._gen_output_concat_piece_as_value(node.children[0]))
+        self._collect_output_tail_operands(node.children[1], out)
+
+    def _gen_output_concat_piece_as_value(self, concat_node: ASTNode) -> Any:
+        # concat_node might be ASTNode('output', [identifier/function_call]) for identifiers
+        if getattr(concat_node, "type", None) == "output":
+            if not concat_node.children:
+                return 0
+            single = concat_node.children[0]
+            if getattr(single, "type", None) == "identifier":
+                # identifier -> id id_tail: function call, array index, or plain variable
+                if (
+                    getattr(single, "children", None)
+                    and len(single.children) >= 2
+                    and getattr(single.children[1], "type", None) == "id_tail"
+                    and getattr(single.children[1], "children", None)
+                    and single.children[1].children
+                ):
+                    tail0 = single.children[1].children[0]
+                    if getattr(tail0, "type", None) in ("param_opts", "param_opts_empty"):
+                        func_id_token_type = single.children[0].value
+                        param_opts_node = tail0
+                        temp = self.ctx.new_temp()
+                        self._emit("CALL", arg1=func_id_token_type, arg2=param_opts_node, result=temp)
+                        return temp
+                    if getattr(tail0, "type", None) == "id_access":
+                        dim = self._dimension_node_from_id_access(tail0)
+                        if dim is not None:
+                            vid = single.children[0].value
+                            temp = self.ctx.new_temp()
+                            self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=temp)
+                            return temp
+                return self._identifier_token_type_from_identifier_node(single)
+            if getattr(single, "type", None) == "function_call":
+                temp = self.ctx.new_temp()
+                self._emit(
+                    "BUILTIN_CALL",
+                    arg1=single,
+                    result=temp,
+                    value_type=self._infer_type(single),
+                )
+                return temp
+
+        # concat_node might be value (rare in this grammar for expression operands)
+        if getattr(concat_node, "type", None) == "value":
+            return self._value_node_to_tac_constant(concat_node.value)
+
+        # char_lit / string_lit in literal -> output_content
+        if getattr(concat_node, "type", None) == "output_content":
+            return getattr(concat_node, "value", None)
+
+        raise NotImplementedError(
+            f"Output-concat piece not supported in TAC: {getattr(concat_node,'type',None)}"
+        )
 
