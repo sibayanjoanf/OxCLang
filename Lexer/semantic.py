@@ -505,6 +505,13 @@ class SemanticAnalyzer:
                     if first_child.type == 'row_size':
                         is_array = True
                         dimensions = self._get_array_dimensions(first_child)
+                        if data_type == 'string' and len(dimensions) >= 2:
+                            line, col = self.get_location(identifier)
+                            actual_name = self.get_actual_name(identifier)
+                            self.error(
+                                f"2D arrays are not allowed for data type 'string' (variable '{actual_name}')",
+                                line, col,
+                            )
                         self._validate_array_size(first_child, identifier)
                         declared_size = self._get_array_declared_size(first_child)
                         # VLA rule: runtime-sized dimension (e.g. [x]) cannot be initialized at declaration.
@@ -512,14 +519,23 @@ class SemanticAnalyzer:
                         if len(norm_dec.children) > 1:
                             array_node = norm_dec.children[1]
                             if array_node.type == 'array' and array_node.children:
+                                actual_name = self.get_actual_name(identifier)
                                 if declared_size is None and not self._row_size_first_dim_is_empty(first_child):
                                     line, col = self.get_location(identifier)
-                                    actual_name = self.get_actual_name(identifier)
                                     self.error(
                                         f"Variable-length array '{actual_name}' cannot be initialized at declaration",
                                         line, col,
                                     )
                                 init_count = self._validate_array_elements(array_node, data_type, identifier)
+                                # If first dimension is unsized ([]), declaration relies on
+                                # initializer count for size inference. Empty initializer
+                                # provides no size information, so reject semantically.
+                                if declared_size is None and self._row_size_first_dim_is_empty(first_child) and init_count == 0:
+                                    line, col = self.get_location(identifier)
+                                    self.error(
+                                        f"Cannot infer array size for '{actual_name}' from an empty initializer",
+                                        line, col,
+                                    )
                                 if declared_size is not None and init_count > declared_size:
                                     line, col = self.get_location(identifier)
                                     self.error(
@@ -566,19 +582,32 @@ class SemanticAnalyzer:
                         if first_child.type == 'row_size':
                             is_array = True
                             dimensions = self._get_array_dimensions(first_child)
+                            if data_type == 'string' and len(dimensions) >= 2:
+                                line, col = self.get_location(identifier)
+                                actual_name = self.get_actual_name(identifier)
+                                self.error(
+                                    f"2D arrays are not allowed for data type 'string' (variable '{actual_name}')",
+                                    line, col,
+                                )
                             self._validate_array_size(first_child, identifier)
                             declared_size = self._get_array_declared_size(first_child)
                             if len(norm_dec.children) > 1:
                                 array_node = norm_dec.children[1]
                                 if array_node.type == 'array' and array_node.children:
+                                    actual_name = self.get_actual_name(identifier)
                                     if declared_size is None and not self._row_size_first_dim_is_empty(first_child):
                                         line, col = self.get_location(identifier)
-                                        actual_name = self.get_actual_name(identifier)
                                         self.error(
                                             f"Variable-length array '{actual_name}' cannot be initialized at declaration",
                                             line, col,
                                         )
                                     init_count = self._validate_array_elements(array_node, data_type, identifier)
+                                    if declared_size is None and self._row_size_first_dim_is_empty(first_child) and init_count == 0:
+                                        line, col = self.get_location(identifier)
+                                        self.error(
+                                            f"Cannot infer array size for '{actual_name}' from an empty initializer",
+                                            line, col,
+                                        )
                                     if declared_size is not None and init_count > declared_size:
                                         line, col = self.get_location(identifier)
                                         self.error(
@@ -1324,11 +1353,36 @@ class SemanticAnalyzer:
                     # Array indexing on LHS: ensure base is actually an array
                     sym = self.lookup(identifier) if identifier else None
                     if sym and not sym.get('is_array'):
-                        line, col = self.get_location(identifier)
-                        self.error(
-                            f"'{self.get_actual_name(identifier)}' is not an array; cannot use '[]' indexing",
-                            line, col,
-                        )
+                        # Language extension: allow scalar string indexing (s[i]) as char access.
+                        if sym.get('data_type') == 'string':
+                            dims_used = 0
+                            for dc in getattr(child, 'children', []):
+                                if hasattr(dc, 'type') and dc.type == 'row_size':
+                                    for rsc in getattr(dc, 'children', []):
+                                        if hasattr(rsc, 'type') and rsc.type == 'size' and getattr(rsc, 'children', None):
+                                            dims_used += 1
+                                    for rsc in getattr(dc, 'children', []):
+                                        if hasattr(rsc, 'type') and rsc.type == 'col_size' and getattr(rsc, 'children', None):
+                                            for cc in rsc.children:
+                                                if hasattr(cc, 'type') and cc.type == 'pdim_size' and getattr(cc, 'children', None):
+                                                    dims_used += 1
+                            line, col = self.get_location(identifier)
+                            if dims_used == 0:
+                                self.error(
+                                    f"String indexing on '{self.get_actual_name(identifier)}' requires an index expression",
+                                    line, col,
+                                )
+                            elif dims_used > 1:
+                                self.error(
+                                    f"String indexing on '{self.get_actual_name(identifier)}' supports only one dimension",
+                                    line, col,
+                                )
+                        else:
+                            line, col = self.get_location(identifier)
+                            self.error(
+                                f"'{self.get_actual_name(identifier)}' is not an array; cannot use '[]' indexing",
+                                line, col,
+                            )
                 self.visit(child)
     
     def _validate_struct_member_access(self, struct_id, member_id):
@@ -1984,6 +2038,35 @@ class SemanticAnalyzer:
                             if sym is None:
                                 return None
                             if not sym.get('is_array'):
+                                # Language extension: scalar string can be indexed with one index.
+                                if sym.get('data_type') == 'string':
+                                    self.visit(dim)
+                                    dims_used = 0
+                                    for dc in getattr(dim, 'children', []):
+                                        if hasattr(dc, 'type') and dc.type == 'row_size':
+                                            for rsc in getattr(dc, 'children', []):
+                                                if hasattr(rsc, 'type') and rsc.type == 'size':
+                                                    if getattr(rsc, 'children', None):
+                                                        dims_used += 1
+                                            for rsc in getattr(dc, 'children', []):
+                                                if hasattr(rsc, 'type') and rsc.type == 'col_size' and getattr(rsc, 'children', None):
+                                                    for cc in rsc.children:
+                                                        if hasattr(cc, 'type') and cc.type == 'pdim_size' and getattr(cc, 'children', None):
+                                                            dims_used += 1
+                                    line, col = self.get_location(first.value)
+                                    if dims_used == 1:
+                                        return 'char'
+                                    if dims_used == 0:
+                                        self.error(
+                                            f"String indexing on '{self.get_actual_name(first.value)}' requires an index expression",
+                                            line, col,
+                                        )
+                                        return 'string'
+                                    self.error(
+                                        f"String indexing on '{self.get_actual_name(first.value)}' supports only one dimension",
+                                        line, col,
+                                    )
+                                    return 'string'
                                 line, col = self.get_location(first.value)
                                 self.error(
                                     f"'{self.get_actual_name(first.value)}' is not an array; cannot use '[]' indexing",

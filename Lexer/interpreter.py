@@ -1156,6 +1156,20 @@ class Interpreter:
                     if not indices:
                         return val
                     if not isinstance(val, list):
+                        # Language extension: allow scalar string indexing (s[i]) -> char.
+                        if isinstance(val, str):
+                            if len(indices) != 1:
+                                raise InterpreterError(
+                                    f"String indexing on '{self.semantic.get_actual_name(id_no)}' supports only one index"
+                                )
+                            i = indices[0]
+                            if i < 0 or i >= len(val):
+                                raise InterpreterError("String index out of bounds")
+                            return val[i]
+                        if val is None and self._lookup_declared_type(id_no) == "string":
+                            raise InterpreterError(
+                                f"Cannot index uninitialized string '{self.semantic.get_actual_name(id_no)}'"
+                            )
                         raise InterpreterError(f"'{self.semantic.get_actual_name(id_no)}' is not an array")
                     if len(indices) == 1:
                         i = indices[0]
@@ -1184,6 +1198,19 @@ class Interpreter:
         if not indices:
             return val
         if not isinstance(val, list):
+            if isinstance(val, str):
+                if len(indices) != 1:
+                    raise InterpreterError(
+                        f"String indexing on '{self.semantic.get_actual_name(id_token_type)}' supports only one index"
+                    )
+                i = indices[0]
+                if i < 0 or i >= len(val):
+                    raise InterpreterError("String index out of bounds")
+                return val[i]
+            if val is None and self._lookup_declared_type(id_token_type) == "string":
+                raise InterpreterError(
+                    f"Cannot index uninitialized string '{self.semantic.get_actual_name(id_token_type)}'"
+                )
             raise InterpreterError(f"'{self.semantic.get_actual_name(id_token_type)}' is not an array")
         if len(indices) == 1:
             i = indices[0]

@@ -1,0 +1,17 @@
+atmosphere(){
+    int num~
+    int sum = 0~
+    
+    exhale("Enter numbers (0 to stop): ")~
+    inhale(num)~
+
+    cycle(num != 0){
+        if (num > 0){
+            sum = sum + num~
+        }
+        exhale("Enter numbers (0 to stop): ")~
+        inhale(num)~
+    }
+
+    exhale("Sum of positive numbers: @{sum}")~
+}

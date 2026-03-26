@@ -1,0 +1,51 @@
+air float areaCircle(float r){
+    gasp 3.14 * r * r~
+}
+
+air float areaTriangle(float b, float h){
+    gasp 0.5 * b * h~
+}
+
+air float areaSquare(float s){
+    gasp s * s~
+}
+
+air float areaRectangle(float l, float w){
+    gasp l * w~
+}
+
+atmosphere(){
+    int choice~
+    float a~
+    float b~
+    float result~
+
+    exhale("1: Circle 2: Triangle 3: Square 4: Rectangle \nEnter: ")~
+    inhale(choice)~
+
+    if (choice == 1){
+        exhale("Enter radius: ")~
+        inhale(a)~
+        result = areaCircle(a)~
+    } elseif (choice == 2){
+        exhale("Enter base: ")~
+        inhale(a)~
+        exhale("Enter height:")~
+        inhale(b)~
+        result = areaTriangle(a, b)~
+    } elseif (choice == 3){
+        exhale("Enter side: ")~
+        inhale(a)~
+        result = areaSquare(a)~
+    } elseif (choice == 4){
+        exhale("Enter length: ")~
+        inhale(a)~
+        exhale("Enter width: ")~
+        inhale(b)~
+        result = areaRectangle(a, b)~
+    } else {
+        exhale("Invalid Input")~
+    }
+
+    exhale("Area: @{result}")~
+}

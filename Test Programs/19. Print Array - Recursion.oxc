@@ -1,0 +1,58 @@
+air vacuum sortAsc(int arr[], int n){
+    echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n - 1~ j++~){
+            if (arr[j] > arr[j+1]){
+                int temp = arr[j]~
+                arr[j] = arr[j+1]~
+                arr[j+1] = temp~
+            }
+        }
+    }
+}
+
+air vacuum sortDesc(int arr[], int n){
+    echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n - 1~ j++~){
+            if (arr[j] < arr[j+1]){
+                int temp = arr[j]~
+                arr[j] = arr[j+1]~
+                arr[j+1] = temp~
+            }
+        }
+    }
+}
+
+air int printArray(int arr[], int index, int size){
+    if (index >= size){
+        gasp 0~
+    }
+
+    exhale("@{arr[index]} ")~
+    printArray(arr, index + 1, size)~
+}
+
+atmosphere(){
+    int n~
+    int choice~
+
+    exhale("Enter number of elements: ")~
+    inhale(n)~
+
+    int arr[n]~
+
+    echo(int i = 0~ i < n~ i++~){
+        exhale("Element @{i}: ")~
+        inhale(arr[i])~
+    }
+
+    exhale("(1) Ascending | (2) Descending : ")~
+    inhale(choice)~
+
+    if (choice == 1){
+        sortAsc(arr, n)~
+    } else {
+        sortDesc(arr, n)~
+    }
+
+    printArray(arr, 0, n)~
+}

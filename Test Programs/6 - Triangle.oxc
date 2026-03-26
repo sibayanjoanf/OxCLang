@@ -1,11 +1,9 @@
 atmosphere(){
     int rows~
-
     exhale("Enter number of rows: ")~
     inhale(rows)~
 
     echo(int i = 1~ i <= rows~ i++~){
-
         int spaces = rows - i~
 
         echo(int s = 1~ s <= spaces~ s++~){

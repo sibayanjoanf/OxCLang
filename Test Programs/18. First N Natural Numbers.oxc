@@ -1,0 +1,17 @@
+air int printN(int current, int limit){
+    if (current > limit){
+        gasp 0~
+    }
+
+    exhale("@{current} ")~
+    printN(current + 1, limit)~
+}
+
+atmosphere(){
+    int n~
+
+    exhale("Enter a number: ")~
+    inhale(n)~
+
+    printN(1, n)~
+}
