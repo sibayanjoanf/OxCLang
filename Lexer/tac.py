@@ -87,6 +87,9 @@ class TACGenerator:
         self.semantic = semantic_analyzer
         self.ctx = _TACContext()
         self.code: List[TACInstr] = []
+        # Stack of loop control targets for nested loops.
+        # Each item: (break_label, continue_label)
+        self._loop_labels: List[Tuple[str, str]] = []
 
     # ---------------- Entry ----------------
 
@@ -214,11 +217,37 @@ class TACGenerator:
             return
         if getattr(node, "type", None) != "stmt_ctrl":
             return
-        # stmt_ctrl -> [statement_node, stmt_ctrl_node]
-        statement_node = node.children[0]
-        rest = node.children[1] if len(node.children) > 1 else None
-        self._gen_statement(statement_node)
-        self._gen_stmt_ctrl(rest)
+        if not getattr(node, "children", None):
+            return
+        # stmt_ctrl -> [statement, stmt_ctrl] | [ctrl_flow]
+        first = node.children[0]
+        t = getattr(first, "type", None)
+        if t == "statement":
+            rest = node.children[1] if len(node.children) > 1 else None
+            self._gen_statement(first)
+            self._gen_stmt_ctrl(rest)
+            return
+        if t == "ctrl_flow":
+            self._gen_ctrl_flow(first)
+            return
+
+    def _gen_ctrl_flow(self, node: ASTNode) -> None:
+        v = getattr(node, "value", None)
+        if v == "resist":
+            if not self._loop_labels:
+                raise NotImplementedError("resist used outside loop is not supported in TAC")
+            break_label, _ = self._loop_labels[-1]
+            self._emit("GOTO", result=break_label)
+            return
+        if v == "flow":
+            if not self._loop_labels:
+                raise NotImplementedError("flow used outside loop is not supported in TAC")
+            _, continue_label = self._loop_labels[-1]
+            self._emit("GOTO", result=continue_label)
+            return
+        # ctrl_flow may also wrap return_stat in subfunctions. TAC generator currently
+        # targets atmosphere/runtime subset and does not lower user-function bodies here.
+        return
 
     def _gen_statement(self, node: ASTNode) -> None:
         if node is None or getattr(node, "type", None) != "statement":
@@ -437,6 +466,7 @@ class TACGenerator:
 
         L_start = self.ctx.new_label("L")
         L_body = self.ctx.new_label("Lbody")
+        L_continue = self.ctx.new_label("Lcont")
         L_end = self.ctx.new_label("Lend")
 
         self._emit("LABEL", result=L_start)
@@ -446,7 +476,10 @@ class TACGenerator:
         self._emit("GOTO", result=L_end)
 
         self._emit("LABEL", result=L_body)
+        self._loop_labels.append((L_end, L_continue))
         self._gen_stmt_ctrl(body)
+        self._loop_labels.pop()
+        self._emit("LABEL", result=L_continue)
         self._gen_identifier_stat(update)
         self._emit("GOTO", result=L_start)
 
@@ -463,17 +496,25 @@ class TACGenerator:
         self._emit("GOTO", result=L_end)
 
         self._emit("LABEL", result=L_body)
+        self._loop_labels.append((L_end, L_start))
         self._gen_stmt_ctrl(body)
+        self._loop_labels.pop()
         self._emit("GOTO", result=L_start)
         self._emit("LABEL", result=L_end)
 
     def _gen_do_while_form(self, body: ASTNode, cond_stat: ASTNode) -> None:
         """do { stmt_ctrl } cycle (cond)~ — body first, then repeat while cond."""
         L_start = self.ctx.new_label("Ldo")
+        L_cond = self.ctx.new_label("Ldo_cond")
+        L_end = self.ctx.new_label("Ldo_end")
         self._emit("LABEL", result=L_start)
+        self._loop_labels.append((L_end, L_cond))
         self._gen_stmt_ctrl(body)
+        self._loop_labels.pop()
+        self._emit("LABEL", result=L_cond)
         cond_place = self._gen_expr_value(cond_stat.children[0])
         self._emit("IF_TRUE_GOTO", arg1=cond_place, result=L_start)
+        self._emit("LABEL", result=L_end)
 
     def _gen_for_init(self, node: ASTNode) -> None:
         # for_init -> [data_type_node, id_no, for_vals]
