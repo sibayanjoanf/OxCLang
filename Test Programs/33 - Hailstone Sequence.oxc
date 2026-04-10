@@ -1,0 +1,21 @@
+atmosphere(){
+    int n = 0~
+    exhale("Input any number to start for Hailstone Sequence: ")~
+    inhale(n)~
+
+    int startVal = n~
+    string seqStr = toString(n) & " "~
+
+    cycle(n != 1){
+        if (n % 2 == 0){
+            n = n / 2~
+        } else {
+            n = (3 * n) + 1~
+        }
+        
+        seqStr = seqStr & toString(n) & " "~
+    }
+
+    exhale("The hailstone sequence starting at @{startVal} is :")~
+    exhale("\n@{seqStr}")~
+}

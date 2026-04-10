@@ -1,0 +1,33 @@
+air int findMax(int arr[], int idx, int curMax){
+    if (idx == sizeOf(arr)){
+        gasp curMax~
+    }
+    
+    if (arr[idx] > curMax){
+        curMax = arr[idx]~
+    }
+    
+    gasp findMax(arr, idx + 1, curMax)~
+}
+
+atmosphere(){
+    int count = 0~
+    exhale("How many numbers do you want to enter? ")~
+    inhale(count)~
+
+    int nums[count]~
+
+    echo(int i = 0~ i < count~ i = i + 1~){
+        int uIdx = i + 1~
+        exhale("Enter element @{uIdx}: ")~
+        inhale(nums[i])~
+    }
+
+    if (count <= 0){
+        exhale("The array is empty!")~
+    } else {
+        int maxVal = findMax(nums, 1, nums[0])~
+        
+        exhale("The largest element is: @{maxVal}")~
+    }
+}

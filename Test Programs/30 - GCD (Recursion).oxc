@@ -1,0 +1,22 @@
+air int findGcd(int a, int b){
+    if (b == 0){
+        gasp a~
+    }
+      
+    gasp findGcd(b, a % b)~
+}
+
+atmosphere(){
+    int num1 = 0~
+    int num2 = 0~
+
+    exhale("Enter the first number: ")~
+    inhale(num1)~
+
+    exhale("Enter the second number: ")~
+    inhale(num2)~
+
+    int result = findGcd(num1, num2)~
+
+    exhale("The GCD of @{num1} and @{num2} is: @{result}")~
+}

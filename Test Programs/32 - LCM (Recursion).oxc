@@ -1,0 +1,26 @@
+air int getGcd(int a, int b){
+    if (b == 0){
+        gasp a~
+    }
+    gasp getGcd(b, a % b)~
+}
+
+atmosphere(){
+    int n1 = 0~
+    int n2 = 0~
+
+    exhale("Enter first number: ")~
+    inhale(n1)~
+    exhale("Enter second number: ")~
+    inhale(n2)~
+
+    if (n1 == 0 || n2 == 0){
+        exhale("The LCM is: 0")~
+    } else {
+        int gVal = getGcd(n1, n2)~
+
+        int lcmResult = (n1 / gVal) * n2~
+
+        exhale("The LCM is: @{lcmResult}")~
+    }
+}

@@ -1,0 +1,52 @@
+atmosphere(){
+    float score~
+    float total~
+    float avg~
+    string currentSub~
+    string avgStr~
+    string quizNumStr~
+    string prompt~
+    string resultMsg~
+    string dashLine = "\n---------------------------"~
+    string finalMsg = "The inputted subjects are all computed~"~
+
+    echo(int s = 0~ s < 4~ s = s + 1~){
+        total = 0.0~
+        
+        if (s == 0){ 
+            currentSub = "Math"~ 
+        } elseif (s == 1){ 
+            currentSub = "Science"~ 
+        } elseif (s == 2){ 
+            currentSub = "English"~ 
+        } else { 
+            currentSub = "Filipino"~ 
+        }
+
+        exhale("--- " & currentSub & " ---\n")~
+        
+        echo(int q = 1~ q <= 5~ q = q + 1~){
+            quizNumStr = toString(q)~
+            prompt = "Enter score for Quiz " & quizNumStr~
+            prompt = prompt & ": "~
+            
+            exhale(prompt)~
+            inhale(score)~
+            total = total + score~
+        }
+        
+        avg = total / 5.0~
+        avgStr = toString(avg)~
+        
+        resultMsg = "Average for " & currentSub~
+        resultMsg = resultMsg & ": "~
+        resultMsg = resultMsg & avgStr~
+        
+        exhale(resultMsg)~
+        exhale(dashLine)~
+        exhale("\n")~
+    }
+
+    exhale("\n")~
+    exhale("Successfully computed all subjects!")~
+}

@@ -1,0 +1,74 @@
+atmosphere(){
+    string inputWord~
+    char word[5]~
+    int choice~
+    char temp~
+    int len~
+    bool isValid = naur~
+    string errorMsg = "Invalid input! Must be exactly 5 letters and no numbers. Try again: "~
+    string resultHeader = "Result: "~
+
+    exhale("Enter a 5-letter word: ")~
+
+    cycle(isValid == naur){
+        inhale(inputWord)~
+        len = horizon(inputWord)~
+        
+        if (len == 5){
+            isValid = yuh~
+            echo(int k = 0~ k < 5~ k = k + 1~){
+                if (inputWord[k] >= '0' && inputWord[k] <= '9'){
+                    isValid = naur~
+                }
+            }
+        }
+
+        if (isValid == naur){
+            exhale(errorMsg)~
+        }
+    }
+    
+    exhale("Sort Order (1 for Ascending, 2 for Descending): ")~
+    inhale(choice)~
+
+    bool validChoice = yuh~
+
+    if (!(choice == 1) && !(choice == 2)){
+      exhale("Invalid choice.\n")~
+      validChoice = naur~
+    }
+
+    if (validChoice){
+      echo(int k = 0~ k < 5~ k = k + 1~){
+        word[k] = inputWord[k]~
+      }
+
+      echo(int i = 0~ i < 4~ i = i + 1~){
+        echo(int j = 0~ j < 4 - i~ j = j + 1~){
+            bool swap = naur~
+            
+            if (choice == 1){
+                if (word[j] > word[j+1]){
+                    swap = yuh~
+                }
+            } else {
+                if (word[j] < word[j+1]){
+                    swap = yuh~
+                }
+            }
+
+            if (swap == yuh){
+                temp = word[j]~
+                word[j] = word[j+1]~
+                word[j+1] = temp~
+            }
+        }
+      }
+
+      exhale(resultHeader)~
+      echo(int l = 0~ l < 5~ l = l + 1~){
+        exhale("@{word[l]}")~
+      }
+      exhale("\n")~
+    }   
+}
