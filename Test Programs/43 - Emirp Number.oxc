@@ -1,0 +1,44 @@
+air bool isPrime(int n){
+    if (n <= 1){
+        gasp naur~
+    }
+    echo(int i = 2~ i <= n / 2~ i++~){
+        if (n % i == 0){
+            gasp naur~
+        }
+    }
+    gasp yuh~
+}
+
+air int reverseNum(int n){
+    int rev = 0~
+    int digit~
+
+    cycle(n > 0){
+        digit = n % 10~
+        rev = rev * 10 + digit~
+        n = n / 10~
+    }
+    gasp rev~
+}
+
+atmosphere(){
+    int n, rev~
+
+    exhale("Enter number: ")~
+    inhale(n)~
+
+    rev = reverseNum(n)~
+
+    if(isPrime(n)){
+      exhale("@{n} -> @{rev}\n")~
+      if (isPrime(rev)){
+        exhale("@{n} is an Emirp Number!\n")~
+      } else {
+        exhale("@{n} is not an Emirp Number.\n")~
+      }
+    } else {
+      exhale("@{n} is not prime. Input a prime number.")~
+    }
+
+}

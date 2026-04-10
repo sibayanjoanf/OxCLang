@@ -1,0 +1,29 @@
+atmosphere(){
+    int n, sq~
+    exhale("Enter a number: ")~
+    inhale(n)~
+
+    sq = n * n~
+
+    string sN = toString(n)~
+    string sS = toString(sq)~
+    int lenN = horizon(sN)~
+    int lenS = horizon(sS)~
+    int startPos = lenS - lenN~    
+    bool isAuto = yuh~
+    
+    echo(int i = 0~ i < lenN~ i++~){    
+        if (sS[startPos] != sN[i]){
+            isAuto = naur~
+            resist~
+        }    
+        startPos++~
+    }
+
+    if (isAuto){
+        exhale("@{n} appears at the end of @{sq}\n")~
+        exhale("@{n} is an Automorphic Number!\n")~
+    } else {
+        exhale("@{n} is not Automorphic.\n")~
+    }
+}

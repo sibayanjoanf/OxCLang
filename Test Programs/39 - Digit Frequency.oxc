@@ -1,0 +1,27 @@
+atmosphere(){
+    int num~
+    string n~
+    string digits = "0123456789"~
+
+    exhale("Enter a number: ")~
+    inhale(num)~
+
+    n = toString(num)~
+
+    // Outer loop: iterate through each digit from '0' to '9'
+    echo(int i = 0~ i < 10~ i++~){
+        char currentDigit = digits[i]~
+        int count = 0~
+
+        // Inner loop: check every character in the converted string
+        echo(int j = 0~ j < horizon(n)~ j++~){
+            if (n[j] == currentDigit){
+                count = count + 1~
+            }
+        }
+
+        if (count > 0){
+            exhale("@{count} - @{currentDigit} \n")~
+        }
+    }
+}

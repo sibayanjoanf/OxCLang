@@ -1,0 +1,18 @@
+atmosphere(){
+    int rows~
+    exhale("Enter number of rows: ")~
+    inhale(rows)~
+
+    echo(int i = 0~ i < rows~ i++~){
+        echo(int s = 0~ s < rows - i - 1~ s++~){
+            exhale(" ")~
+        }
+        int num = 1~
+
+        echo(int j = 0~ j <= i~ j++~){
+            exhale("@{num} ")~
+            num = num * (i - j) / (j + 1)~
+        }
+        exhale("\n")~
+    }
+}

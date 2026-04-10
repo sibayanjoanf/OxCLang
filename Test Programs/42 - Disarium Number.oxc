@@ -1,0 +1,39 @@
+atmosphere(){
+    string nStr~
+    int totalSum = 0~
+    string expr = ""~
+    bool first = yuh~
+    
+    exhale("Enter a number: ")~
+    inhale(nStr)~
+    
+    int len = horizon(nStr)~
+
+    echo(int i = 0~ i < len~ i++~){
+        string dChar = toString(nStr[i])~
+        int digit = toInt(dChar)~        
+      
+        int position = i + 1~
+        int powerResult = 1~
+   
+        echo(int p = 0~ p < position~ p++~){
+            powerResult = powerResult * digit~
+        }
+
+        if (!(first)){
+            expr = expr & " + "~
+        }
+
+        expr = expr & toString(digit) & "^" & toString(position)~
+        totalSum = totalSum + powerResult~
+        first = naur~
+    }
+
+    exhale("@{expr} = @{totalSum}\n")~
+
+    if (totalSum == toInt(nStr)){
+        exhale("@{nStr} is a Disarium Number!\n")~
+    } else {
+        exhale("@{nStr} is not a Disarium Number.\n")~
+    }
+}

@@ -1,0 +1,18 @@
+atmosphere(){
+    int n, sum = 0~
+    exhale("Enter number: ")~
+    inhale(n)~
+
+
+    echo(int i = 1~ i <= n/2~ i++~){
+        if (n % i == 0){
+            sum = sum + i~
+        }
+    }
+
+    if (sum == n){
+        exhale("Perfect Number!\n")~
+    } else {
+        exhale("Not a Perfect Number.\n")~
+    }
+}

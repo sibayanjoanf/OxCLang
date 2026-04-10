@@ -1,0 +1,24 @@
+atmosphere(){
+    int n, sq, sum = 0~
+    exhale("Enter a number: ")~
+    inhale(n)~
+
+    sq = n * n~
+    
+    string strSq = toString(sq)~
+    int len = horizon(strSq)~
+ 
+    echo(int i = 0~ i < len~ i++~){    
+        string digitChar = toString(strSq[i])~
+        int digitVal = toInt(digitChar)~
+        sum = sum + digitVal~
+    }
+
+    if (sum == n){
+        exhale("The digits of @{sq} add up to @{n}.\n")~
+        exhale("@{n} is a Neon Number!\n")~
+    } else {
+        exhale("The digits of @{sq} do not add up to @{n}.\n")~  
+        exhale("@{n} is not a Neon Number\n")~
+    }
+}
