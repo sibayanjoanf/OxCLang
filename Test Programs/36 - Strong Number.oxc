@@ -1,0 +1,27 @@
+air int getFact(int d){
+    int f = 1~
+    echo(int i = 1~ i <= d~ i++~){
+        f = f * i~
+    }
+    gasp f~
+}
+
+atmosphere(){
+    int n, original, digit~
+    int sum = 0~
+    exhale("Input a number: ")~
+    inhale(n)~
+    original = n~
+
+    cycle(n > 0){
+        digit = n % 10~
+        sum = sum + getFact(digit)~
+        n = n / 10~
+    }
+
+    if (sum == original){
+        exhale("Strong Number!\n")~
+    } else {
+        exhale("Not a Strong Number.\n")~
+    }
+}

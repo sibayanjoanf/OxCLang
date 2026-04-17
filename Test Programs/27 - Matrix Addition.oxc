@@ -1,0 +1,30 @@
+atmosphere(){
+    int arrayA[5]~
+    int arrayB[5]~
+    int arrayC[5]~
+    int displayNum~
+
+    exhale("Input 5 elements for Array A:\n")~
+    echo(int i = 0~ i < 5~ i = i + 1~){
+        displayNum = i + 1~
+        exhale("Element @{displayNum}: ")~
+        inhale(arrayA[i])~
+    }
+
+    exhale("Input 5 elements for Array B:\n")~
+    echo(int j = 0~ j < 5~ j = j + 1~){
+        displayNum = j + 1~
+        exhale("Element @{displayNum}: ")~
+        inhale(arrayB[j])~
+    }
+
+    echo(int k = 0~ k < 5~ k = k + 1~){
+        arrayC[k] = arrayA[k] + arrayB[k]~
+    }
+
+    exhale("Sum in Array C: ")~
+    echo(int l = 0~ l < 5~ l = l + 1~){
+        exhale("@{arrayC[l]} ")~
+    }
+    exhale("")~
+}

@@ -45,16 +45,25 @@ atmosphere(){
         } else {
             exhale("Missing: ")~
 
+            bool first = yuh~
             if (!(hasUpper)){
-                exhale("uppercase ")~
+              exhale("uppercase")~
+              first = naur~
             }
 
             if (!(hasNumber)){
-                exhale("number ")~
+              if (!(first)){
+                exhale(", ")~
+              }
+              exhale("number")~
+              first = naur~
             }
 
             if (!(hasSpecial)){
-                exhale("special character ")~
+              if (!(first)){
+                exhale(", ")~
+              }
+            exhale("special character")~
             }
 
             exhale("\n")~

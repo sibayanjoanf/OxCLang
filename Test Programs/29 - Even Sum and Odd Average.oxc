@@ -1,0 +1,28 @@
+atmosphere(){
+    int n = 0~
+    exhale("Enter the value of N: ")~
+    inhale(n)~
+    int evenSum = 0~
+    int oddSum = 0~
+    int oddCount = 0~
+
+    echo(int i = 1~ i <= n~ i = i + 1~){
+        if (i % 2 == 0){
+            evenSum = evenSum + i~
+        } else {
+            oddSum = oddSum + i~
+            oddCount = oddCount + 1~
+        }
+    }
+
+    float oddAverage = 0.0~
+    if (oddCount > 0){
+        float fSum = toFloat(toString(oddSum))~
+        float fCount = toFloat(toString(oddCount))~
+        oddAverage = fSum / fCount~
+    }
+
+    string avgResult = waft(oddAverage, 2)~
+    exhale("The sum of even numbers is: @{evenSum}")~
+    exhale("\nThe average of odd numbers is: @{avgResult}")~
+}

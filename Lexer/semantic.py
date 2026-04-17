@@ -1657,13 +1657,9 @@ class SemanticAnalyzer:
     def visit_if_stat(self, node):
         for child in node.children:
             if child.type == 'cond_stat':
-                cond_type = self._get_expression_type(child)
-                if cond_type and cond_type not in ('bool', 'int', 'float', 'char'):
-                    line, col = self.get_node_location(child)
-                    self.error(
-                        f"Condition in 'if' must evaluate to a boolean-compatible type, got '{cond_type}'",
-                        line, col,
-                    )
+                # Centralized condition-type validation is handled in visit_cond_stat
+                # so if/elseif/while/echo/do-cycle are checked uniformly.
+                self.visit(child)
             elif child.type == 'stmt_ctrl':
                 self.visit(child)
             elif child.type == 'if_tail':
@@ -1839,6 +1835,15 @@ class SemanticAnalyzer:
         return self._get_expression_type(node)
     
     def visit_cond_stat(self, node):
+        # Conditions support OxC truthy/falsy semantics:
+        # bool as-is, numeric 0/non-zero, char null/non-null.
+        cond_type = self._get_expression_type(node)
+        if cond_type and cond_type not in ('bool', 'int', 'float', 'char'):
+            line, col = self.get_node_location(node)
+            self.error(
+                f"Condition must evaluate to a boolean-compatible type, got '{cond_type}'",
+                line, col,
+            )
         for child in node.children:
             if hasattr(child, 'type'):
                 self.visit(child)

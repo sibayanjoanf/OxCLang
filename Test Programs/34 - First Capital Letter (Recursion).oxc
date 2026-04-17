@@ -1,0 +1,26 @@
+air char findCap(string s, int i){
+    if (i == horizon(s)){
+        gasp '0'~ 
+    }    
+    char cur = s[i]~
+    
+    if (cur >= 'A' && cur <= 'Z'){
+        gasp cur~
+    }
+    
+    gasp findCap(s, i + 1)~
+}
+
+atmosphere(){
+    string word = ""~
+    exhale("Input a string: ")~
+    inhale(word)~
+    
+    char result = findCap(word, 0)~
+    
+    if (result == '0'){
+        exhale("No capital letter was found in the string.")~
+    } else {
+        exhale("The first capital letter is: @{result}")~
+    }
+}

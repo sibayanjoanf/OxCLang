@@ -29,11 +29,11 @@ class TACVM:
         self.semantic = semantic_analyzer
         self.tokens = tokens or []
         self.ast_root = ast_root
-
+        
         # Reuse existing runtime semantics for expression fragments we don't
         # re-implement here (notably output strings).
         self.runtime = Interpreter(semantic_analyzer, tokens=self.tokens)
-
+        
         # Public fields consumed by your Flask UI/backend (app.py).
         self.output: List[str] = self.runtime.output
         self.waiting_for_input: bool = False
@@ -156,6 +156,35 @@ class TACVM:
     def _set_temp(self, name: str, value: Any) -> None:
         self._temps[name] = value
 
+    def _to_numeric_value(self, value: Any) -> Any:
+        """
+        Coerce runtime values for arithmetic/ordering operations.
+        Mirrors OxC runtime semantics used by the interpreter:
+        - bool -> 1/0
+        - char (single-character string) -> ASCII via ord()
+        - numeric strings -> int/float
+        """
+        if value is None:
+            return 0
+        if isinstance(value, bool):
+            return 1 if value else 0
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str):
+            if len(value) == 1:
+                return ord(value)
+            try:
+                if "." in value:
+                    return float(value)
+                return int(value)
+            except Exception:
+                raise TACExecutionError(
+                    f"Operation requires numeric/char operands, got string: {value!r}"
+                )
+        raise TACExecutionError(
+            f"Operation requires numeric/char operands, got {type(value).__name__}"
+        )
+
     def _execute_until_pause_or_end(self) -> None:
         while self._pc < len(self._tac):
             if self.waiting_for_input:
@@ -172,7 +201,7 @@ class TACVM:
                 continue
             if op == "IF_TRUE_GOTO":
                 cond_val = self._get_value(instr.arg1)
-                if bool(cond_val):
+                if self.runtime._to_bool(cond_val):
                     self._pc = self._label_to_pc[instr.result]
                 continue
 
@@ -262,7 +291,7 @@ class TACVM:
 
             if op == "UMINUS":
                 value = self._get_value(instr.arg1)
-                res = -value
+                res = -self._to_numeric_value(value)
                 if self._is_temp(instr.result):
                     self._set_temp(instr.result, res)
                 else:
@@ -272,7 +301,7 @@ class TACVM:
             if op == "LNOT":
                 # Logical !: match Interpreter._eval_primary for !(logic_expr) -> not bool(inner)
                 value = self._get_value(instr.arg1)
-                res = not bool(value)
+                res = not self.runtime._to_bool(value)
                 if self._is_temp(instr.result):
                     self._set_temp(instr.result, res)
                 else:
@@ -286,12 +315,20 @@ class TACVM:
                 b = self._get_value(instr.arg2)
 
                 if op == "+":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     res = a + b
                 elif op == "-":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     res = a - b
                 elif op == "*":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     res = a * b
                 elif op == "/":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     if b == 0:
                         raise TACExecutionError("Division by zero")
                     # Match interpreter: int/int -> integer division.
@@ -300,6 +337,8 @@ class TACVM:
                     else:
                         res = a / b
                 elif op == "%":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     if b == 0:
                         raise TACExecutionError("Modulo by zero")
                     if isinstance(b, float):
@@ -308,21 +347,29 @@ class TACVM:
                         raise TACExecutionError("Modulo operator requires integer operands")
                     res = a % b
                 elif op == ">":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     res = a > b
                 elif op == "<":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     res = a < b
                 elif op == ">=":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     res = a >= b
                 elif op == "<=":
+                    a = self._to_numeric_value(a)
+                    b = self._to_numeric_value(b)
                     res = a <= b
                 elif op == "==":
                     res = a == b
                 elif op == "!=":
                     res = a != b
                 elif op == "||":
-                    res = bool(a) or bool(b)
+                    res = self.runtime._to_bool(a) or self.runtime._to_bool(b)
                 elif op == "&&":
-                    res = bool(a) and bool(b)
+                    res = self.runtime._to_bool(a) and self.runtime._to_bool(b)
                 else:
                     raise TACExecutionError(f"Unhandled binary op: {op}")
 

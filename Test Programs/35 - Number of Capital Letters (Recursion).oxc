@@ -1,0 +1,23 @@
+air int countCaps(string s, int i){
+    if (i == horizon(s)){
+        gasp 0~
+    }
+    
+    char cur = s[i]~   
+    if (cur >= 'A' && cur <= 'Z'){
+        gasp 1 + countCaps(s, i + 1)~
+    }
+    
+
+    gasp 0 + countCaps(s, i + 1)~
+}
+
+atmosphere(){
+    string word = ""~
+    exhale("Input a string: ")~
+    inhale(word)~
+    
+    int total = countCaps(word, 0)~
+    
+    exhale("No of capital letters: @{total}")~
+}

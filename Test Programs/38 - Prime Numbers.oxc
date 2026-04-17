@@ -1,0 +1,28 @@
+atmosphere(){
+    int start, end~
+    exhale("Start number: ")~
+    inhale(start)~
+    exhale("End number: ")~
+    inhale(end)~
+
+
+    if (end < start){
+      exhale("End value should be larger than starting value.")~
+    } else {
+      echo(int i = start~ i <= end~ i++~){
+        if (i < 2){ flow~ }
+        
+        bool isPrime = yuh~
+        echo(int j = 2~ j < i~ j++~){
+            if (i % j == 0){
+                isPrime = naur~
+                resist~
+            }
+        }
+        
+        if (isPrime){
+            exhale("@{i} ")~
+        }
+      }
+    }
+}
