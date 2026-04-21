@@ -480,7 +480,10 @@ class Parser:
     # Production 27: <struct_tail2> → = {<1d_element>}
     # PREDICT = {=}
 
-    # Production 28: <struct_tail2> → λ
+    # Production 28: <struct_tail2> → [<size>] <struct_tail3>
+    # PREDICT = {[}
+
+    # Production 29: <struct_tail2> → λ
     # PREDICT = {~}
 
     def parse_struct_tail2(self):
@@ -492,18 +495,45 @@ class Parser:
             oned_element_node = self.parse_1d_element()
             self.match('}')
             return ASTNode('struct_tail2', children=[ASTNode('operator', value='='), oned_element_node])
+        elif current == '[':
+            self.match('[')
+            size_node = self.parse_size()
+            self.match(']')
+            struct_tail3_node = self.parse_struct_tail3()
+            return ASTNode('struct_tail2', children=[size_node, struct_tail3_node])
         elif current == '~':
             return ASTNode('struct_tail2_empty')
+        else:
+            self.error(f"Unexpected token: '{current}' | Expected '=' or '[' or '~'")
+
+    # <struct_tail3>
+    # Production 30: <struct_tail3> → = {<2d_element>}
+    # PREDICT = {=}
+
+    # Production 31: <struct_tail3> → λ
+    # PREDICT = {~}
+
+    def parse_struct_tail3(self):
+        current = self.peek()
+
+        if current == '=':
+            self.match('=')
+            self.match('{')
+            twod_element_node = self.parse_2d_element()
+            self.match('}')
+            return ASTNode('struct_tail3', children=[ASTNode('operator', value='='), twod_element_node])
+        elif current == '~':
+            return ASTNode('struct_tail3_empty')
         else:
             self.error(f"Unexpected token: '{current}' | Expected '=' or '~'")
 
 
 
     # <gust_tail>
-    # Production 29: <gust_tail> → <data_type> id~ <gust_tail>
+    # Production 32: <gust_tail> → <data_type> id~ <gust_tail>
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 30: <gust_tail> → λ
+    # Production 33: <gust_tail> → λ
     # PREDICT = {}}
 
     def parse_gust_tail(self):
@@ -522,10 +552,10 @@ class Parser:
 
 
     # <constant>
-    # Production 31: <constant> → <data_type> id <const_dec>~
+    # Production 34: <constant> → <data_type> id <const_dec>~
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 32: <constant> → <struct_const>
+    # Production 35: <constant> → <struct_const>
     # PREDICT = {gust}
 
     def parse_constant(self):
@@ -545,10 +575,10 @@ class Parser:
 
 
     # <const_dec>
-    # Production 33: <const_dec> → = <literal> <const_tail>
+    # Production 36: <const_dec> → = <literal> <const_tail>
     # PREDICT = {=}
 
-    # Production 34: <const_dec> → <row_size> = {<const_arr>} <const_tail>
+    # Production 37: <const_dec> → <row_size> = {<const_arr>} <const_tail>
     # PREDICT = {[}
 
     def parse_const_dec(self):
@@ -572,10 +602,10 @@ class Parser:
 
 
     # <const_tail>
-    # Production 35: <const_tail> → , id <const_dec>
+    # Production 38: <const_tail> → , id <const_dec>
     # PREDICT = {,}
 
-    # Production 36: <const_tail> → λ
+    # Production 39: <const_tail> → λ
     # PREDICT = {~} 
 
     def parse_const_tail(self):
@@ -593,10 +623,10 @@ class Parser:
 
 
     # <const_arr>
-    # Production 37: <const_arr> → <const_1d>
+    # Production 40: <const_arr> → <const_1d>
     # PREDICT = {++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit}
 
-    # Production 38: <const_arr> → <const_2d>
+    # Production 41: <const_arr> → <const_2d>
     # PREDICT = {{}
 
     def parse_const_arr(self):
@@ -614,7 +644,7 @@ class Parser:
 
 
     # <const_1d>
-    # Production 39: <const_1d> → <output> <element_tail>
+    # Production 42: <const_1d> → <output> <element_tail>
     # PREDICT = {++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit}
 
     def parse_const_1d(self):
@@ -630,7 +660,7 @@ class Parser:
 
 
     # <const_2d>
-    # Production 40: <const_2d> → {<const_1d>} <const_2d_tail>
+    # Production 43: <const_2d> → {<const_1d>} <const_2d_tail>
     # PREDICT = {{}
 
     def parse_const_2d(self):
@@ -647,10 +677,10 @@ class Parser:
 
 
     # <const_2d_tail>
-    # Production 41: <const_2d_tail> → , {<const_1d>} <const_2d_tail>
+    # Production 44: <const_2d_tail> → , {<const_1d>} <const_2d_tail>
     # PREDICT = {,}
 
-    # Production 42: <const_2d_tail> → λ
+    # Production 45: <const_2d_tail> → λ
     # PREDICT = {}}
 
     def parse_const_2d_tail(self):
@@ -670,7 +700,7 @@ class Parser:
 
 
     # <struct_const>
-    # Production 43: <struct_const> → gust id id = {<const_1d>}~
+    # Production 46: <struct_const> → gust id id <struct_const_tail>~
     # PREDICT = {gust}
 
     def parse_struct_const(self):
@@ -680,21 +710,46 @@ class Parser:
             self.match('gust')
             id_no = self.check_id()
             id_no2 = self.check_id()
+            struct_const_tail_node = self.parse_struct_const_tail()
+            self.match('~')
+            return ASTNode('struct_const', children=[id_no, id_no2, struct_const_tail_node])
+        else:
+            self.error(f"Unexpected token: '{current}' | Expected 'gust'")
+
+    # <struct_const_tail>
+    # Production 47: <struct_const_tail> → = {<const_1d>}
+    # PREDICT = {=}
+
+    # Production 48: <struct_const_tail> → [<size>] = {<const_2d>}
+    # PREDICT = {[}
+
+    def parse_struct_const_tail(self):
+        current = self.peek()
+
+        if current == '=':
             self.match('=')
             self.match('{')
             const_1d_node = self.parse_const_1d()
             self.match('}')
-            self.match('~')
-            return ASTNode('struct_const', children=[id_no, id_no2, ASTNode('operator', value='='), const_1d_node])
+            return ASTNode('struct_const_tail', children=[ASTNode('operator', value='='), const_1d_node])
+        elif current == '[':
+            self.match('[')
+            size_node = self.parse_size()
+            self.match(']')
+            self.match('=')
+            self.match('{')
+            const_2d_node = self.parse_const_2d()
+            self.match('}')
+            return ASTNode('struct_const_tail', children=[size_node, ASTNode('operator', value='='), const_2d_node])
         else:
-            self.error(f"Unexpected token: '{current}' | Expected 'gust'")
+            self.error(f"Unexpected token: '{current}' | Expected '=' or '['")
 
 
     # <dimension>
-    # Production 44: <dimension> → <row_size>
+    # Production 49: <dimension> → <row_size>
     # PREDICT = {[}
 
-    # Production 45: <dimension> → λ
+    # Production 50: <dimension> → λ
     # PREDICT = {~, ++, --,  =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }, & }
 
     def parse_dimension(self):
@@ -712,7 +767,7 @@ class Parser:
 
 
     # <row_size>
-    # Production 46: <row_size> → [<size>] <col_size>
+    # Production 51: <row_size> → [<size>] <col_size>
     # PREDICT = {[}
 
     def parse_row_size(self):
@@ -742,10 +797,10 @@ class Parser:
 
 
     # <col_size>
-    # Production 47: <col_size> → [<pdim_size>]
+    # Production 52: <col_size> → [<pdim_size>]
     # PREDICT = {[}
 
-    # Production 48: <col_size> → λ
+    # Production 53: <col_size> → λ
     # PREDICT = {~, ++, --,  =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }, & }
 
     def parse_col_size(self):
@@ -776,11 +831,11 @@ class Parser:
 
 
     # <size>
-    # Production 49: <size> → <arith_expr>
+    # Production 54: <size> → <arith_expr>
     # PREDICT = {(, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, 
     #               int_lit, float_lit, yuh, naur, char_lit, string_lit, !}
 
-    # Production 50: <size> → λ
+    # Production 55: <size> → λ
     # PREDICT = {]}
 
     def parse_size(self):
@@ -796,7 +851,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '(', identifier, int_lit, float_lit, -")
 
     # <data_type>
-    # Production 51–55: <data_type> → int | float | char | string | bool
+    # Production 56–60: <data_type> → int | float | char | string | bool
     # PREDICT = { int | float | char | string | bool }
 
     def parse_data_type(self):
@@ -821,10 +876,10 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected data type (int, float, char, string, bool)")
 
     # <sub_functions>
-    # Production 56: sub_functions → <air_func> <sub_functions>
+    # Production 61: sub_functions → <air_func> <sub_functions>
     # PREDICT = {air}
 
-    # Production 57: sub_functions → λ
+    # Production 62: sub_functions → λ
     # PREDICT = {atmosphere}
 
     def parse_sub_functions(self):
@@ -841,7 +896,7 @@ class Parser:
 
 
     # <air_func>
-    # Production 58: <air_func> → air <return_type> id (<params>) { <body> <return_stat> }
+    # Production 63: <air_func> → air <return_type> id (<params>) { <body> <return_stat> }
     # PREDICT = {air}
 
     def parse_air_func(self):
@@ -864,10 +919,10 @@ class Parser:
 
 
     # <return_type>
-    # Production 59: <return_type> → <data_type>
+    # Production 64: <return_type> → <data_type>
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 60: <return_type> → vacuum
+    # Production 65: <return_type> → vacuum
     # PREDICT = {vacuum}
 
     def parse_return_type(self):
@@ -884,10 +939,10 @@ class Parser:
 
 
     # <params>
-    # Production 61: <params> → <data_type> id <params_dim> <params_tail>
+    # Production 66: <params> → <data_type> id <params_dim> <params_tail>
     # PREDICT = {int, float, char, string, bool}
 
-    # Production 62: <params> → λ
+    # Production 67: <params> → λ
     # PREDICT = {)}
 
     def parse_params(self):
@@ -906,10 +961,10 @@ class Parser:
 
 
     # <params_dim>
-    # Production 63: <params_dim> → [<pdim_tail>
+    # Production 68: <params_dim> → [<pdim_tail>
     # PREDICT = {[}
 
-    # Production 64: <params_dim> → λ
+    # Production 69: <params_dim> → λ
     # PREDICT = {,, )}
 
     def parse_params_dim(self):
@@ -926,10 +981,10 @@ class Parser:
 
 
     # <pdim_tail>
-    # Production 65: <pdim_tail> → ]
+    # Production 70: <pdim_tail> → ]
     # PREDICT = {]}
 
-    # Production 66: <pdim_tail> → <pdim_size>] [<pdim_size>]
+    # Production 71: <pdim_tail> → <pdim_size>] [<pdim_size>]
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !, -}
 
@@ -952,7 +1007,7 @@ class Parser:
 
 
     # <pdim_size>
-    # Production 67: <pdim_size> → <arith_expr>
+    # Production 72: <pdim_size> → <arith_expr>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !, -}
 
@@ -968,10 +1023,10 @@ class Parser:
 
 
     # <params_tail>
-    # Production 68: <params_tail> → , <data_type> id <params_dim> <params_tail>
+    # Production 73: <params_tail> → , <data_type> id <params_dim> <params_tail>
     # PREDICT = {,}
 
-    # Production 69: <params_tail> → λ
+    # Production 74: <params_tail> → λ
     # PREDICT = {)}
 
     def parse_params_tail(self):
@@ -991,7 +1046,7 @@ class Parser:
 
 
     # <body>
-    # Production 70: <body> → <stmt_list>
+    # Production 75: <body> → <stmt_list>
     # PREDICT = { int, float, char, string, bool, gust, wind, inhale, exhale, ++, --, id, if, stream, cycle, echo, do, }, gasp }
 
     def parse_body(self):
@@ -1010,10 +1065,10 @@ class Parser:
 
 
     # <stmt_list>
-    # Production 71: <stmt_list> → <statement> <stmt_list>
+    # Production 76: <stmt_list> → <statement> <stmt_list>
     # PREDICT = { int, float, char, string, bool, gust, wind, inhale, exhale, ++, --, id, if, stream, cycle, echo, do }
 
-    # Production 72: <stmt_list> → λ
+    # Production 77: <stmt_list> → λ
     # PREDICT = {}, gasp, resist}
 
     def parse_stmt_list(self):
@@ -1040,7 +1095,7 @@ class Parser:
 
 
     # <statement>
-    # Production 73–77: <statement> → <declaration> | <input_output> | <identifier_stat> | <conditioner> | <iteration>
+    # Production 78–82: <statement> → <declaration> | <input_output> | <identifier_stat> | <conditioner> | <iteration>
     # PREDICT = {int, float, char, string, bool, gust, wind}
     # PREDICT = {inhale, exhale}
     # PREDICT = {++, --, id}
@@ -1074,10 +1129,10 @@ class Parser:
 
 
     # <identifier_stat>
-    # Production 78: <identifier_stat> → <unary_op> id <id_access>~
+    # Production 83: <identifier_stat> → <unary_op> id <id_access>~
     # PREDICT = {++,--}
 
-    # Production 79: <identifier_stat> → id <id_stat_body>~
+    # Production 84: <identifier_stat> → id <id_stat_body>~
     # PREDICT = {id}
 
     def parse_identifier_stat(self):
@@ -1088,7 +1143,7 @@ class Parser:
             id_no = self.check_id()
             id_access_node = None
             if not self.in_echo:
-                id_access_node = self.parse_id_access(78)
+                id_access_node = self.parse_id_access(83)
             self.match('~')
             return ASTNode('identifier_stat', children=[unary_op_node, id_no, id_access_node])
         elif current and current.startswith('id'):
@@ -1100,10 +1155,10 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '++' or '--' or identifier")
 
     # <id_stat_body>
-    # Production 80: <id_stat_body> → (<param_opts>)
+    # Production 85: <id_stat_body> → (<param_opts>)
     # PREDICT = {(}
 
-    # Production 81: <id_stat_body> → <id_access> <id_stat_tail>
+    # Production 86: <id_stat_body> → <id_access> <id_stat_tail>
     # PREDICT = {[, .,  ++, --,  =, +=, -=, *=, /=, %=}
 
     def parse_id_stat_body(self):
@@ -1115,17 +1170,17 @@ class Parser:
             self.match(')')
             return ASTNode('id_stat_body', children=[param_opts_node])
         elif current in [ '[', '.', '++', '--', '=', '+=', '-=', '*=', '/=', '%=']:
-            id_access_node = self.parse_id_access(81)
+            id_access_node = self.parse_id_access(86)
             id_stat_tail_node = self.parse_id_stat_tail()
             return ASTNode('id_stat_body', children=[id_access_node, id_stat_tail_node])
         else:
             self.error(f"Unexpected token: '{current}' | Expected '(','[', '.', '++', '--', '=', '+=', '-=', '*=', '/=', '%='")
             
     # <id_stat_tail>
-    # Production 82: <id_stat_tail> → <unary_op>
+    # Production 87: <id_stat_tail> → <unary_op>
     # PREDICT = { ++, -- }
 
-    # Production 83: <id_stat_tail> → <assignment>
+    # Production 88: <id_stat_tail> → <assignment>
     # PREDICT = { =, +=, -=, *=, /=, %= }
 
     def parse_id_stat_tail(self):
@@ -1141,10 +1196,10 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '++', '--', '=', '+=', '-=', '*=', '/=', '%='")
 
     # <identifier>
-    # Production 84: <identifier> → <unary_op> id<id_access>
+    # Production 89: <identifier> → <unary_op> id<id_access>
     # PREDICT = { ++, -- }
 
-    # Production 85: <identifier> → id<id_tail>
+    # Production 90: <identifier> → id<id_tail>
     # PREDICT = {id}
 
     def parse_identifier(self):
@@ -1153,7 +1208,7 @@ class Parser:
         if current in ['++', '--']:
             unary_op_node = self.parse_unary_op()
             id_no = self.check_id()
-            id_access_node = self.parse_id_access(84)
+            id_access_node = self.parse_id_access(89)
             return ASTNode('identifier', children=[unary_op_node, id_access_node])
         elif current and current.startswith('id'):
             id_no = self.check_id()
@@ -1163,10 +1218,10 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected ++, --, or identifier")
 
     # <id_tail>
-    # Production 86: <id_tail> → (<param_opts>)
+    # Production 91: <id_tail> → (<param_opts>)
     # PREDICT = { ( }
 
-    # Production 87: <id_tail> → <id_access> <unary_op2>
+    # Production 92: <id_tail> → <id_access> <unary_op2>
     # PREDICT = { [, ., ~, ++, --, =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }, & }
 
     def parse_id_tail(self):
@@ -1179,7 +1234,7 @@ class Parser:
             return ASTNode('id_tail', children=[param_opts_node])
         elif current in ['[', '.', '~', '++', '--', '=','+=', '-=', '*=', '/=', '%=',
                          '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=',',', ')', '||', '&&', '}', '&']:
-            id_access_node = self.parse_id_access(87)
+            id_access_node = self.parse_id_access(92)
             unary_op2_node = self.parse_unary_op2()
             return ASTNode('id_tail', children=[id_access_node, unary_op2_node])
         else:
@@ -1196,49 +1251,42 @@ class Parser:
 
 
     # <id_access>
-    # Production 88: <id_access> → <dimension>
-    # PREDICT = { [, ~, ++, --,  =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }, & }
-
-    # Production 89: <id_access> → .id
-    # PREDICT = {.}
-
+    # Production 93: <id_access> → <dimension> <id_member>
+    # PREDICT = { [, ., ~, ++, --,  =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }, & }
 
     def parse_id_access(self, prodNo):
         current = self.peek()
 
-        if prodNo in [94, 163]:
+        if prodNo in [100, 169]:
             if current in ['[', '~', ')']:
                 dimension_node = self.parse_dimension()
                 return ASTNode('id_access', children=[dimension_node])
             elif current == '.':
-                self.match('.')
-                id_no = self.check_id()
-                return ASTNode('id_access', children=['.', id_no])
+                id_member_node = self.parse_id_member()
+                return ASTNode('id_access', children=[id_member_node])
             else:
                 self.error(f"Unexpected token: '{current}' | Expected [, ., or ')' to close")
                 raise StopIteration
             
-        if prodNo == 175:
+        if prodNo == 181:
             if current in ['[', '=']:
                 dimension_node = self.parse_dimension()
                 return ASTNode('id_access', children=[dimension_node])
             elif current == '.':
-                self.match('.')
-                id_no = self.check_id()
-                return ASTNode('id_access', children=['.', id_no])
+                id_member_node = self.parse_id_member()
+                return ASTNode('id_access', children=[id_member_node])
             else:
                 self.error(f"Unexpected token: '{current}' | Expected [, ., or '='")
                 raise StopIteration
 
                 
-        if prodNo == 182:
+        if prodNo == 188:
             if current in ['[', '~']:
                 dimension_node = self.parse_dimension()
                 return ASTNode('id_access', children=[dimension_node])
             elif current == '.':
-                self.match('.')
-                id_no = self.check_id()
-                return ASTNode('id_access', children=['.', id_no])
+                id_member_node = self.parse_id_member()
+                return ASTNode('id_access', children=[id_member_node])
             else:
                 self.error(f"Unexpected token: '{current}' | Expected [, ., or ~ after identifier, got '{current}'")
                 raise StopIteration
@@ -1248,11 +1296,8 @@ class Parser:
             dimension_node = self.parse_dimension()
             return ASTNode('id_access', children=[dimension_node])
         elif current == '.':
-            self.match('.')
-            id_no = self.check_id()
-            return ASTNode('id_access', children=['.', id_no])
-
-
+            id_member_node = self.parse_id_member()
+            return ASTNode('id_access', children=[id_member_node])
 
         else:
             expected = "+, -, *, /, %, ||, &&, &"
@@ -1270,10 +1315,28 @@ class Parser:
             raise StopIteration
 
 
+    # Production 94: <id_member> → .id
+    # PREDICT = {.}
+
+    # Production 95: <id_member> → λ
+    # PREDICT = {~, ++, --,  =, +=, -=, *=, /=, %=, +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ), ||, &&, }, &} 
+
+    def parse_id_member(self):
+        current = self.peek()
+
+        if current == '.':
+            self.match('.')
+            id_no = self.check_id()
+            return ASTNode('id_member', children=['.', id_no])
+        elif current in ['~', '++', '--', '=','+=', '-=', '*=', '/=', '%=',
+                         '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=',',', ')', '||', '&&', '}', '&']:
+            return ASTNode('id_member_empty')
+        else:
+            self.error(f"Unexpected token: '{current}' | Expected '.'")
 
 
     # <unary_op>
-    # Production 90–91: <unary_op> → ++ | --
+    # Production 96–97: <unary_op> → ++ | --
     # PREDICT = {++ | --}
 
     def parse_unary_op(self):
@@ -1290,10 +1353,10 @@ class Parser:
                 
 
     # <unary_op2>
-    # Production 92: <unary_op2> → <unary_op>
+    # Production 98: <unary_op2> → <unary_op>
     # PREDICT = {++, --}
 
-    # Production 93: <unary_op2> → λ
+    # Production 99: <unary_op2> → λ
     # PREDICT = { +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ~, ), ||, &&, } }
 
     def parse_unary_op2(self):
@@ -1309,10 +1372,10 @@ class Parser:
 
 
     # <input_output>
-    # Production 94: <input_output> → inhale(id <id_access>)~
+    # Production 100: <input_output> → inhale(id <id_access>)~
     # PREDICT = {inhale}
 
-    # Production 95: <input_output> → exhale(<output>)~
+    # Production 101: <input_output> → exhale(<output>)~
     # PREDICT = {exhale}
 
     def parse_input_output(self):
@@ -1322,7 +1385,7 @@ class Parser:
             self.match('inhale')
             self.match('(')
             id_no = self.check_id()
-            id_access_node = self.parse_id_access(94)
+            id_access_node = self.parse_id_access(100)
             self.match(')')
             self.match('~')
             return ASTNode('input_output', children=['inhale', id_no, id_access_node])
@@ -1337,7 +1400,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected 'inhale' or 'exhale'")
 
     # <output>
-    # Production 96: <output> → <literal>
+    # Production 102: <output> → <literal>
     # PREDICT = { int_lit, float_lit, yuh, naur, char_lit, string_lit, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft }
 
 
@@ -1352,10 +1415,10 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '++, --' or 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft' or 'int_lit', 'float_lit', 'yuh', 'naur', 'char_lit', 'string_lit'")
 
     # <literal>
-    # Production 97: <literal> → <value>
+    # Production 103: <literal> → <value>
     # PREDICT = { int_lit, float_lit, yuh, naur }
 
-    # Production 98: <literal> → <output_concat> <output_tail>
+    # Production 104: <literal> → <output_concat> <output_tail>
     # PREDICT = { char_lit, string_lit, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft }
 
 
@@ -1374,7 +1437,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '++, --' or 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft' or 'int_lit', 'float_lit', 'yuh', 'naur', 'char_lit', 'string_lit'")
 
     # <value>
-    # Production 99–102: <value> → int_lit | float_lit | yuh | naur
+    # Production 105–108: <value> → int_lit | float_lit | yuh | naur
     # PREDICT = { int_lit | float_lit | yuh | naur }
 
     def parse_value(self):
@@ -1396,16 +1459,16 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, yuh, naur")
 
     # <output_concat>
-    # Production 103: <output_concat> → char_lit
+    # Production 109: <output_concat> → char_lit
     # PREDICT = { char_lit }
 
-    # Production 104: <output_concat> → string_lit
+    # Production 110: <output_concat> → string_lit
     # PREDICT = { string_lit }
 
-    # Production 105: <output_concat> → <identifier>
+    # Production 111: <output_concat> → <identifier>
     # PREDICT = { ++, --, id }
 
-    # Production 106: <output_concat> → <function_call>
+    # Production 112: <output_concat> → <function_call>
     # PREDICT = { toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft }
 
     def parse_output_concat(self):
@@ -1427,10 +1490,10 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected 'char_lit', 'string_lit' or '++, --' or 'id' or 'toRise', 'toFall', 'horizon', 'sizeOf', 'toInt', 'toFloat', 'toString', 'toChar', 'toBool', 'waft'")
 
     # <output_tail>
-    # Production 107: <output_tail> → & <output_concat> <output_tail>
+    # Production 113: <output_tail> → & <output_concat> <output_tail>
     # PREDICT = {&}
 
-    # Production 108: <output_tail> → λ
+    # Production 114: <output_tail> → λ
     # PREDICT = { +, -, *, /, %, ], >, <, >=, <=, ==, !=, ,, ~, ), ||, &&, } }
 
     def parse_output_tail(self):
@@ -1447,7 +1510,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=', '||', '&&', or terminator '~'")
 
     # <assi_op>
-    # Production 109-114: <assi_op> → = | += | -= | *= | /= | %=
+    # Production 115-120: <assi_op> → = | += | -= | *= | /= | %=
     # PREDICT = {= | += | -= | *= | /= | %=}
 
     def parse_assi_op(self):
@@ -1476,7 +1539,7 @@ class Parser:
 
 
     # <assignment>
-    # Production 115: <assignment> → <assi_op> <expr>
+    # Production 121: <assignment> → <assi_op> <expr>
     # PREDICT = {=, +=, -=, *=, /=, %=}
 
     def parse_assignment(self):
@@ -1491,7 +1554,7 @@ class Parser:
 
 
     # <expr>
-    # Production 116: <expr> → <logic_expr>
+    # Production 122: <expr> → <logic_expr>
     # PREDICT = { (, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
     def parse_expr(self):
@@ -1506,7 +1569,7 @@ class Parser:
 
 
     # <logic_expr>
-    # Production 117: <logic_expr> → <and_expr> <or_tail>
+    # Production 123: <logic_expr> → <and_expr> <or_tail>
     # PREDICT = {(, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
     def parse_logic_expr(self):
@@ -1522,10 +1585,10 @@ class Parser:
 
 
     # <or_tail>
-    # Production 118: <or_tail> → || <and_expr> <or_tail>
+    # Production 124: <or_tail> → || <and_expr> <or_tail>
     # PREDICT = {||}
 
-    # Production 119: <or_tail> → λ
+    # Production 125: <or_tail> → λ
     # PREDICT = {~, ,, )}
 
     def parse_or_tail(self):
@@ -1554,7 +1617,7 @@ class Parser:
 
 
     # <and_expr>
-    # Production 120: <and_expr> → <rela_expr> <and_tail>
+    # Production 126: <and_expr> → <rela_expr> <and_tail>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1571,10 +1634,10 @@ class Parser:
 
 
     # <and_tail>
-    # Production 121: <and_tail> → && <rela_expr> <and_tail>
+    # Production 127: <and_tail> → && <rela_expr> <and_tail>
     # PREDICT = {&&}
 
-    # Production 122: <and_tail> → λ
+    # Production 128: <and_tail> → λ
     # PREDICT = { ~, ,, ), || }
 
     def parse_and_tail(self):
@@ -1603,7 +1666,7 @@ class Parser:
 
 
     # <rela_expr>
-    # Production 123: <rela_expr> → <arith_expr> <rela_tail>
+    # Production 129: <rela_expr> → <arith_expr> <rela_tail>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1620,10 +1683,10 @@ class Parser:
 
 
     # <rela_tail>
-    # Production 124: <rela_tail> → <rela_sym> <arith_expr>
+    # Production 130: <rela_tail> → <rela_sym> <arith_expr>
     # PREDICT = {>, <, >=, <=, ==, !=}
 
-    # Production 125: <rela_tail> → λ
+    # Production 131: <rela_tail> → λ
     # PREDICT = { ~, ,, ), ||, && }
 
     def parse_rela_tail(self):
@@ -1647,7 +1710,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected relational symbols (> < >= <= == !=) or '&&' '||' '~' ',' ')'")
 
     # <rela_sym>
-    # Production 126-131: <rela_sym> → > | < | >= | <= | == | !=
+    # Production 132-137: <rela_sym> → > | < | >= | <= | == | !=
     # PREDICT = {> | < | >= | <= | == | !=}
 
     def parse_rela_sym(self):
@@ -1675,7 +1738,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected relational symbols (> < >= <= == !=)")
 
     # <arith_op1>
-    # Production 132-133: <arith_op1> → + | -
+    # Production 138-139: <arith_op1> → + | -
     # PREDICT = {+ | -}
 
     def parse_arith_op1(self):
@@ -1691,7 +1754,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '+' or '-'")
 
     # <arith_op2>
-    # Production 134-136: <arith_op2> → * | / | %
+    # Production 140-142: <arith_op2> → * | / | %
     # PREDICT = {* | / | %}
 
     def parse_arith_op2(self):
@@ -1710,7 +1773,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '*' or '/' or '%'")
 
     # <arith_expr>
-    # Production 137: <arith_expr> → <term> <arith_tail>
+    # Production 143: <arith_expr> → <term> <arith_tail>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1727,10 +1790,10 @@ class Parser:
 
 
     # <arith_tail>
-    # Production 138: <arith_tail> → <arith_op1> <term> <arith_tail>
+    # Production 144: <arith_tail> → <arith_op1> <term> <arith_tail>
     # PREDICT = {+, -}
 
-    # Production 139: <arith_tail> → λ
+    # Production 145: <arith_tail> → λ
     # PREDICT = { ~, ,, ], ), ||, &&, >, <, >=, <=, ==, != }
 
     def parse_arith_tail(self):
@@ -1780,7 +1843,7 @@ class Parser:
 
 
     # <term>
-    # Production 140: <term> → <factor> <term_tail>
+    # Production 146: <term> → <factor> <term_tail>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1799,10 +1862,10 @@ class Parser:
 
 
     # <term_tail>
-    # Production 141: <term_tail> → <arith_op2> <factor> <term_tail>
+    # Production 147: <term_tail> → <arith_op2> <factor> <term_tail>
     # PREDICT = {*, /, %}
 
-    # Production 142: <term_tail> → λ
+    # Production 148: <term_tail> → λ
     # PREDICT = { ~, ], ,, ), ||, &&, >, <, >=, <=, ==, !=, +, -}
 
     def parse_term_tail(self):
@@ -1838,7 +1901,7 @@ class Parser:
         
 
     # <factor>
-    # Production 143: <factor> → <primary>
+    # Production 149: <factor> → <primary>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -1855,16 +1918,16 @@ class Parser:
 
 
     # <primary>
-    # Production 144: <primary> → ( <expr> )
+    # Production 150: <primary> → ( <expr> )
     # PREDICT = {(}
 
-    # Production 145: <primary> → -<negate>
+    # Production 151: <primary> → -<negate>
     # PREDICT = {-}
 
-    # Production 146: <primary> → <output>
+    # Production 152: <primary> → <output>
     # PREDICT = { ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit }
 
-    # Production 147: <primary> → !( <logic_expr> )
+    # Production 153: <primary> → !( <logic_expr> )
     # PREDICT = {!}
 
     def parse_primary(self):
@@ -1903,10 +1966,10 @@ class Parser:
             raise StopIteration
 
     # <negate>
-    # Production 148: <negate> → (<expr>)
+    # Production 154: <negate> → (<expr>)
     # PREDICT = {(}
 
-    # Production 149: <negate> → id<id_access>
+    # Production 155: <negate> → id<id_access>
     # PREDICT = {id}
 
     def parse_negate(self):
@@ -1921,20 +1984,20 @@ class Parser:
             return ASTNode('negate', children=[expr_node])
         elif current and current.startswith("id"):
             id_no = self.check_id()
-            id_access_node = self.parse_id_access(149)
+            id_access_node = self.parse_id_access(155)
             return ASTNode('negate', children=[id_no, id_access_node])
         else:
             self.error(f"Unexpected token: '{current}' | Expected identifier, or '(' in expression")
             
 
     # <stmt_ctrl>
-    # Production 150: <stmt_ctrl> → <statement> <stmt_ctrl>
+    # Production 156: <stmt_ctrl> → <statement> <stmt_ctrl>
     # PREDICT = {int, float, char, string, bool, gust, wind, inhale, exhale, ++, --, id, if, stream, cycle, echo, do}
 
-    # Production 151: <stmt_ctrl> → <ctrl_flow>
+    # Production 157: <stmt_ctrl> → <ctrl_flow>
     # PREDICT = {resist, flow, gasp}
 
-    # Production 152: <stmt_ctrl> → λ
+    # Production 158: <stmt_ctrl> → λ
     # PREDICT = {}}
 
     def parse_stmt_ctrl(self):
@@ -1954,7 +2017,7 @@ class Parser:
 
 
     # <ctrl_flow>
-    # Production 154–155: <ctrl_flow> → resist~ | flow~
+    # Production 159–161: <ctrl_flow> → resist~ | flow~
     # PREDICT = {resist | flow}
 
     def parse_ctrl_flow(self):
@@ -1975,7 +2038,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected 'resist' or 'flow''")
 
     # <conditioner>
-    # Production 156–157: <conditioner> → <if_stat> | <switch_stat>
+    # Production 162–163: <conditioner> → <if_stat> | <switch_stat>
     # PREDICT = {if | stream}
 
     def parse_conditioner(self):
@@ -1991,7 +2054,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected 'if' or 'stream'")
 
     # <if_stat>
-    # Production 158: <if_stat> → if (<cond_stat>) {<stmt_ctrl>} <if_tail>
+    # Production 164: <if_stat> → if (<cond_stat>) {<stmt_ctrl>} <if_tail>
     # PREDICT = {if}
 
     def parse_if_stat(self):
@@ -2014,13 +2077,13 @@ class Parser:
 
 
     # <if_tail>
-    # Production 159: <if_tail> → elseif (<cond_stat>) {<stmt_ctrl>} <if_tail>
+    # Production 165: <if_tail> → elseif (<cond_stat>) {<stmt_ctrl>} <if_tail>
     # PREDICT = {elseif}
 
-    # Production 160: <if_tail> → else {<stmt_ctrl>}
+    # Production 166: <if_tail> → else {<stmt_ctrl>}
     # PREDICT = {else}
 
-    # Production 161: <if_tail> → λ
+    # Production 167: <if_tail> → λ
     # PREDICT = { }, int, float, char, string, bool, gust, wind, inhale, exhale, ++, --, id, resist, flow, if, stream, cycle, echo, do, gasp }
 
     def parse_if_tail(self):
@@ -2052,7 +2115,7 @@ class Parser:
                          "'resist', 'flow', 'if', 'stream', 'cycle', 'echo', 'do', 'gasp'")
 
     # <cond_stat>
-    # Production 162: <cond_stat> → <expr>
+    # Production 168: <cond_stat> → <expr>
     # PREDICT = {(, ++, --, id, int_lit, float_lit, char_lit, string_lit, yuh, naur, toRise, toFall, 
     #            horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, !}
 
@@ -2068,7 +2131,7 @@ class Parser:
 
 
     # <switch_stat>
-    # Production 163: <switch_stat> → stream (id <id_access>) { <switch_cases> <switch_def> }
+    # Production 169: <switch_stat> → stream (id <id_access>) { <switch_cases> <switch_def> }
     # PREDICT = {stream}
 
     def parse_switch_stat(self):
@@ -2078,7 +2141,7 @@ class Parser:
             self.match('stream')
             self.match('(')
             id_no = self.check_id()
-            id_access_node = self.parse_id_access(163)
+            id_access_node = self.parse_id_access(169)
             self.match(')')
             self.match('{')
             switch_cases_node = self.parse_switch_cases()
@@ -2090,10 +2153,10 @@ class Parser:
 
 
     # <switch_cases>
-    # Production 164: <switch_cases> → case <switch_opts> : <stmt_list> resist~ <switch_cases>
+    # Production 170: <switch_cases> → case <switch_opts> : <stmt_list> resist~ <switch_cases>
     # PREDICT = {case}
 
-    # Production 165: <switch_cases> → λ
+    # Production 171: <switch_cases> → λ
     # PREDICT = { }, diffuse }
 
     def parse_switch_cases(self):
@@ -2114,7 +2177,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected 'case' or 'diffuse' or '}}'")
 
     # <switch_opts>
-    # Production 166-167: <switch_opts> → int_lit | char_lit
+    # Production 172-173: <switch_opts> → int_lit | char_lit
     # PREDICT = {int_lit | char_lit}
 
     def parse_switch_opts(self):
@@ -2131,10 +2194,10 @@ class Parser:
 
 
     # <switch_def>
-    # Production 168: <switch_def> → diffuse: <stmt_list> resist~
+    # Production 174: <switch_def> → diffuse: <stmt_list> resist~
     # PREDICT = {diffuse}
 
-    # Production 169: <switch_def> → λ
+    # Production 175: <switch_def> → λ
     # PREDICT = {}}
 
     def parse_switch_def(self):
@@ -2154,7 +2217,7 @@ class Parser:
 
 
     # <iteration>
-    # Production 170–172: <iteration> → <while_loop> | <for_loop> | <dowhile_loop>
+    # Production 176–178: <iteration> → <while_loop> | <for_loop> | <dowhile_loop>
     # PREDICT = {cycle | echo | do}
 
     def parse_iteration(self):
@@ -2174,7 +2237,7 @@ class Parser:
 
 
     # <while_loop>
-    # Production 173: <while_loop> → cycle (<cond_stat>) { <stmt_ctrl> }
+    # Production 179: <while_loop> → cycle (<cond_stat>) { <stmt_ctrl> }
     # PREDICT = {cycle}
 
     def parse_while_loop(self):
@@ -2199,7 +2262,7 @@ class Parser:
 
 
     # <for_loop>
-    # Production 174: <for_loop> → echo (<for_init>~ <cond_stat>~ <identifier_stat>) { <stmt_ctrl> } 
+    # Production 180: <for_loop> → echo (<for_init>~ <cond_stat>~ <identifier_stat>) { <stmt_ctrl> } 
     # PREDICT = {echo}
 
     def parse_for_loop(self):
@@ -2224,16 +2287,16 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected 'echo'")
 
     # <for_init>
-    # Production 175: <for_init> → id<id_access> = <for_vals>
+    # Production 181: <for_init> → id<id_access> = <for_vals>
     # PREDICT = {id}
 
-    # Production 176: <for_init> → int id = <for_vals>
+    # Production 182: <for_init> → int id = <for_vals>
     # PREDICT = {int}
 
-    # Production 177: <for_init> → float id = <for_vals>
+    # Production 183: <for_init> → float id = <for_vals>
     # PREDICT = {float}
 
-    # Production 178: <for_init> → char id = <for_vals>
+    # Production 184: <for_init> → char id = <for_vals>
     # PREDICT = {char}
 
     def parse_for_init(self):
@@ -2241,10 +2304,10 @@ class Parser:
 
         if current and current.startswith('id'):
             id_no = self.check_id()
-            id_access_node = self.parse_id_access(175)
+            id_access_node = self.parse_id_access(181)
             self.match('=')
             for_vals_node = self.parse_for_vals()
-            return ASTNode('for_init', children=[id_no, id_access_node, for_vals_node])
+            return ASTNode('for_init', children=[id_no, id_access_node, ASTNode('operator', value='='), for_vals_node])
         elif current == 'int':
             data_type_node = self.parse_data_type()
             id_no = self.check_id()
@@ -2268,7 +2331,7 @@ class Parser:
             
 
     # <for_vals>
-    # Production 179-182: <for_vals> → int_lit | float_lit | char_lit | id<id_access>
+    # Production 185-188: <for_vals> → int_lit | float_lit | char_lit | id<id_access>
     # PREDICT = {int_lit | float_lit | char_lit | id}
 
     def parse_for_vals(self):
@@ -2285,13 +2348,13 @@ class Parser:
             return ASTNode('for_vals', value=litvalue.value)
         elif current and current.startswith('id'):
             id_no = self.check_id()
-            id_access_node = self.parse_id_access(182)
+            id_access_node = self.parse_id_access(188)
             return ASTNode('for_vals', children=[id_no, id_access_node])
         else:
             self.error(f"Unexpected token: '{current}' | Expected int_lit, float_lit, or char_lit")        
 
     # <dowhile_loop>
-    # Production 183: <dowhile_loop> → do {<stmt_ctrl>} cycle (<cond_stat>)~
+    # Production 189: <dowhile_loop> → do {<stmt_ctrl>} cycle (<cond_stat>)~
     # PREDICT = {do}
 
     def parse_dowhile_loop(self):
@@ -2318,7 +2381,7 @@ class Parser:
 
 
     # <function_call>
-    # Production 184–193: <function_call> → toRise(<param_item>)
+    # Production 190–199: <function_call> → toRise(<param_item>)
     #                                     toFall(<param_item>)
     #                                     horizon(<param_item>)
     #                                     sizeOf(<param_item>)
@@ -2400,10 +2463,10 @@ class Parser:
 
 
     # <param_opts>
-    # Production 194: param_opts → <param_list>
+    # Production 200: param_opts → <param_list>
     # PREDICT = { (, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
-    # Production 195: param_opts → λ
+    # Production 201: param_opts → λ
     # PREDICT = { ) }
 
     def parse_param_opts(self):
@@ -2419,7 +2482,7 @@ class Parser:
             self.error(f"Unexpected token: '{current}' | Expected '(', '!', '-', identifier, int_lit, float_lit, yuh, naur, char_lit, or string_lit")
 
     # <param_list>
-    # Production 196: param_list → <param_item> <param_tail>
+    # Production 202: param_list → <param_item> <param_tail>
     # PREDICT = { (, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
     def parse_param_list(self):
@@ -2435,7 +2498,7 @@ class Parser:
 
 
     # <param_item>
-    # Production 197: param_item → <expr>
+    # Production 203: param_item → <expr>
     # PREDICT = { (, ++, --, id, toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft, int_lit, float_lit, yuh, naur, char_lit, string_lit, ! }
 
     def parse_param_item(self):
@@ -2450,10 +2513,10 @@ class Parser:
 
 
     # <param_tail>
-    # Production 198: param_tail → , <param_list>
+    # Production 204: param_tail → , <param_list>
     # PREDICT = {,}
 
-    # Production 199: param_tail → λ
+    # Production 205: param_tail → λ
     # PREDICT = {)}
 
     def parse_param_tail(self):
@@ -2470,10 +2533,10 @@ class Parser:
 
 
     # <return_stat>
-    # Production 200: return_stat → gasp <expr>~
+    # Production 206: return_stat → gasp <expr>~
     # PREDICT = {gasp}
 
-    # Production 201: return_stat → λ
+    # Production 207: return_stat → λ
     # PREDICT = {}}
 
     def parse_return_stat(self):
