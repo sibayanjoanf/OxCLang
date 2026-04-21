@@ -38,7 +38,7 @@ class TACInstr:
             return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
         if self.op == "ASSIGN_WITH_ACCESS":
             return f"(ASSIGN_WITH_ACCESS, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
-        if self.op in {"INDEX_LOAD", "STORE_INDEX"}:
+        if self.op in {"INDEX_LOAD", "STORE_INDEX", "MEMBER_LOAD"}:
             return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
         if self.op == "CALL":
             return f"(CALL, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
@@ -733,6 +733,27 @@ class TACGenerator:
     def _id_access_has_dimension(self, id_access_node: Optional[ASTNode]) -> bool:
         return self._dimension_node_from_id_access(id_access_node) is not None
 
+    def _gen_identifier_access_load(self, vid: str, id_access: Optional[ASTNode]) -> Any:
+        """
+        Return a TAC place for identifier access:
+        - plain variable -> vid
+        - indexed access -> INDEX_LOAD temp
+        - struct member access (obj.m / arr[i].m) -> MEMBER_LOAD temp
+        """
+        if id_access is None:
+            return vid
+        member = self._id_member_node_from_id_access(id_access)
+        if member is not None:
+            t_load = self.ctx.new_temp()
+            self._emit("MEMBER_LOAD", arg1=vid, arg2=id_access, result=t_load)
+            return t_load
+        dim = self._dimension_node_from_id_access(id_access)
+        if dim is not None:
+            t_load = self.ctx.new_temp()
+            self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=t_load)
+            return t_load
+        return vid
+
     def _gen_identifier_stat(self, node: ASTNode) -> None:
         # Two shapes in this grammar:
         # 1) prefix inc/dec: identifier_stat -> [unary_op, id_no, id_access]
@@ -974,12 +995,10 @@ class TACGenerator:
             vid = getattr(id_no, "value", None)
             if vid is None:
                 vid = self._identifier_token_type_from_identifier_node(id_no)
-            dim = self._dimension_node_from_id_access(id_access)
-            if dim is not None:
-                t_load = self.ctx.new_temp()
-                self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=t_load)
+            src = self._gen_identifier_access_load(vid, id_access)
+            if src != vid:
                 temp = self.ctx.new_temp()
-                self._emit("UMINUS", arg1=t_load, result=temp, value_type=self._infer_type(node))
+                self._emit("UMINUS", arg1=src, result=temp, value_type=self._infer_type(node))
                 return temp
 
         vid_node = node.children[0]
@@ -1051,12 +1070,8 @@ class TACGenerator:
                         self._emit("CALL", arg1=func_id_token_type, arg2=param_opts_node, result=temp)
                         return temp
                     if getattr(tail0, "type", None) == "id_access":
-                        dim = self._dimension_node_from_id_access(tail0)
-                        if dim is not None:
-                            vid = single.children[0].value
-                            temp = self.ctx.new_temp()
-                            self._emit("INDEX_LOAD", arg1=vid, arg2=dim, result=temp)
-                            return temp
+                        vid = single.children[0].value
+                        return self._gen_identifier_access_load(vid, tail0)
                 return self._identifier_token_type_from_identifier_node(single)
             if getattr(single, "type", None) == "function_call":
                 temp = self.ctx.new_temp()

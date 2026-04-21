@@ -369,6 +369,12 @@ class TACVM:
                 self._set_temp(instr.result, val)
                 continue
 
+            if op == "MEMBER_LOAD":
+                # arg1=vid, arg2=id_access AST, result=temp
+                val = self.runtime._read_identifier_with_access(instr.arg1, instr.arg2)
+                self._set_temp(instr.result, val)
+                continue
+
             if op == "STORE_INDEX":
                 # arg1=vid, arg2=dimension AST, result=value operand (usually temp)
                 val = self._get_value(instr.result)
