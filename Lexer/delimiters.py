@@ -188,7 +188,7 @@ def closesqua_dlm(char):
         return False
     return (char in wspace or 
             char in operator or
-            char in ',~)[')
+            char in ',~)[.')
 
 def opencurl_dlm(char):
     if char == '':

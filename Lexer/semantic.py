@@ -300,6 +300,7 @@ class SemanticAnalyzer:
             """
             Parse placeholder content into one of:
             - ('struct', parent_name, member_name)
+            - ('array_struct', base_name, member_name)
             - ('array', base_name, dims_count) where dims_count is number of indices provided (1 or 2)
             - ('var', name)
             Returns (kind, ...) or (None, reason).
@@ -310,15 +311,41 @@ class SemanticAnalyzer:
             # Disallow function calls in placeholders
             if '(' in s or ')' in s:
                 return None, "function call not allowed in string interpolation"
-            # Struct member: parent.member (no mixing with [] for now)
+            # Struct member: parent.member
+            # Array-of-struct member: arr[...].member
             if '.' in s:
                 parts = s.split('.', 1)
                 parent = parts[0].strip()
                 member = parts[1].strip() if len(parts) > 1 else ''
                 if not parent or not member:
                     return None, "invalid struct placeholder"
-                if '[' in parent or ']' in parent or '[' in member or ']' in member:
-                    return None, "invalid placeholder (cannot mix '.' with '[]')"
+                if '[' in member or ']' in member:
+                    return None, "invalid struct placeholder"
+                if '[' in parent or ']' in parent:
+                    # Accept exactly one indexed base form: name[index].member
+                    base = parent.split('[', 1)[0].strip()
+                    if not base:
+                        return None, "missing base identifier"
+                    # Basic bracket-balance check and max one index for struct arrays
+                    dims = 0
+                    i = len(base)
+                    while i < len(parent):
+                        if parent[i].isspace():
+                            i += 1
+                            continue
+                        if parent[i] != '[':
+                            return None, "unexpected characters after base identifier"
+                        j = parent.find(']', i + 1)
+                        if j == -1:
+                            return None, "unclosed ']' in placeholder"
+                        inside = parent[i + 1:j].strip()
+                        if inside == '':
+                            return None, "empty array index not allowed in string interpolation"
+                        dims += 1
+                        i = j + 1
+                    if dims != 1:
+                        return None, "invalid placeholder (array of structures requires exactly one index)"
+                    return ('array_struct', base, member)
                 return ('struct', parent, member)
             # Array element: name[...][...] (only count bracket pairs; contents validated lightly)
             if '[' in s or ']' in s:
@@ -383,6 +410,31 @@ class SemanticAnalyzer:
                 if not member_found:
                     line, col = get_line_col()
                     self.error(f"'{member_name}' is not a member of structure '{parent_name}'", line, col)
+                continue
+
+            if kind == 'array_struct':
+                _, base_name, member_name = parsed
+                base_key, base_symbol = resolve_by_actual_name(base_name)
+                if base_symbol is None:
+                    line, col = get_line_col()
+                    self.error(f"Undeclared identifier '{base_name}' in string interpolation", line, col)
+                    continue
+                if not base_symbol.get('is_array'):
+                    line, col = get_line_col()
+                    self.error(f"'{base_name}' is not an array; cannot index in string interpolation", line, col)
+                    continue
+                struct_type = base_symbol.get('struct_type')
+                if not struct_type:
+                    line, col = get_line_col()
+                    self.error(f"'{base_name}' is not an array of structures; cannot access member in string interpolation", line, col)
+                    continue
+                struct_def = self.get_structure(struct_type)
+                if not struct_def:
+                    continue
+                member_found = any(self.get_actual_name(k) == member_name for k in struct_def)
+                if not member_found:
+                    line, col = get_line_col()
+                    self.error(f"'{member_name}' is not a member of structure '{base_name}'", line, col)
                 continue
 
             if kind == 'array':
@@ -842,6 +894,8 @@ class SemanticAnalyzer:
                 elif first_child.type == 'identifier':
                     struct_type = identifier
                     var_name = first_child.value
+                    is_struct_array = False
+                    struct_array_dims = []
                     
                     struct_def = self.get_structure(struct_type)
                     if not struct_def:
@@ -851,12 +905,39 @@ class SemanticAnalyzer:
                             actual_name = self.get_actual_name(struct_type)
                             self.error(f"Undefined structure type '{actual_name}'", line, col)
                     
+                    # Detect gust array declaration form: gust T name[<size>]~
+                    if len(struct_tail.children) > 1:
+                        st2 = struct_tail.children[1]
+                        if getattr(st2, 'type', None) == 'struct_tail2' and getattr(st2, 'children', None) and len(st2.children) >= 1:
+                            first_st2 = st2.children[0]
+                            if getattr(first_st2, 'type', None) in ('size', 'size_empty'):
+                                is_struct_array = True
+                                struct_array_dims = ['unsized'] if getattr(first_st2, 'type', None) == 'size_empty' else ['sized']
+
                     if not self.declare_symbol(var_name, 'struct_instance', struct_type,
-                                               struct_type=struct_type):
+                                               struct_type=struct_type,
+                                               is_array=is_struct_array,
+                                               array_dimensions=struct_array_dims):
                         line, col = self.get_location(var_name)
                         actual_var_name = self.get_actual_name(var_name)
                         self.error(f"Duplicate variable declaration: '{actual_var_name}' is already declared in this scope", line, col)
-                    
+
+                    # Rule lock: arrays of gust must not use aggregate initialization at declaration.
+                    # Detect: gust T arr[size] = {{...}}~
+                    if len(struct_tail.children) > 1:
+                        st2 = struct_tail.children[1]
+                        if getattr(st2, 'type', None) == 'struct_tail2' and getattr(st2, 'children', None) and len(st2.children) >= 2:
+                            first_st2 = st2.children[0]
+                            st3 = st2.children[1]
+                            if getattr(first_st2, 'type', None) == 'size' and getattr(st3, 'type', None) == 'struct_tail3' and getattr(st3, 'children', None):
+                                if len(st3.children) >= 1 and getattr(st3.children[0], 'type', None) == 'operator' and getattr(st3.children[0], 'value', None) == '=':
+                                    line, col = self.get_location(var_name)
+                                    self.error(
+                                        "Invalid gust array initialization: arrays of gust cannot be initialized with '{}' at declaration; declare first and assign via arr[index].member",
+                                        line,
+                                        col,
+                                    )
+
                     # Validate initializer values match struct member types
                     self._validate_struct_init(struct_tail, struct_type, var_name)
     
@@ -906,6 +987,11 @@ class SemanticAnalyzer:
             if st2_type == 'struct_tail2_empty':
                 return
             if st2_type == 'struct_tail2' and struct_tail2.children and len(struct_tail2.children) >= 2:
+                # Only gust T x = {...} should be validated as single-struct initializer.
+                # For gust T arr[size] <struct_tail3>, defer to array-of-struct checks.
+                first = struct_tail2.children[0]
+                if not (getattr(first, 'type', None) == 'operator' and getattr(first, 'value', None) == '='):
+                    return
                 oned_elem = struct_tail2.children[1]
                 if getattr(oned_elem, 'type', None) == '1d_element':
                     self._collect_1d_element_values(oned_elem, values)
@@ -1248,8 +1334,10 @@ class SemanticAnalyzer:
         id_access_for_member = None
         assignment_node = None
         for child in node.children:
-            if child.type == 'id_access' and len(child.children) >= 2 and child.children[0] == '.':
-                id_access_for_member = child
+            if child.type == 'id_access' and len(child.children) >= 2:
+                id_member = child.children[1]
+                if getattr(id_member, 'type', None) == 'id_member' and getattr(id_member, 'children', None):
+                    id_access_for_member = child
             elif child.type == 'assignment':
                 assignment_node = child
             elif child.type == 'id_stat_tail' and child.children:
@@ -1259,7 +1347,8 @@ class SemanticAnalyzer:
         
         if id_access_for_member is not None and assignment_node is not None and identifier:
             # Member assignment: validate member, constant, and RHS type
-            member_id = id_access_for_member.children[1]
+            id_member = id_access_for_member.children[1]
+            member_id = id_member.children[1] if getattr(id_member, 'children', None) and len(id_member.children) > 1 else None
             member_id_value = member_id.value if hasattr(member_id, 'value') else None
             if member_id_value is not None:
                 member_type = self._validate_struct_member_access(identifier, member_id_value)
@@ -1346,9 +1435,11 @@ class SemanticAnalyzer:
         """Handle id_access which might be struct member access or array index."""
         for child in node.children:
             if hasattr(child, 'type'):
-                if child.type == 'identifier':
-                    # Struct member access: id.member
-                    self._validate_struct_member_access(identifier, child.value)
+                if child.type == 'id_member' and getattr(child, 'children', None) and len(child.children) >= 2:
+                    member_id = child.children[1]
+                    if hasattr(member_id, 'value'):
+                        # Struct member access: id.member
+                        self._validate_struct_member_access(identifier, member_id.value)
                 if child.type == 'dimension':
                     # Array indexing on LHS: ensure base is actually an array
                     sym = self.lookup(identifier) if identifier else None
@@ -1634,8 +1725,9 @@ class SemanticAnalyzer:
                     # Two-tier check: validate that the accessed member exists on the structure
                     if len(node.children) >= 3:
                         id_access_node = node.children[2]
-                        if getattr(id_access_node, 'type', None) == 'id_access' and getattr(id_access_node, 'children', None) and len(id_access_node.children) >= 2 and id_access_node.children[0] == '.':
-                            member_node = id_access_node.children[1]
+                        if getattr(id_access_node, 'type', None) == 'id_access' and getattr(id_access_node, 'children', None) and len(id_access_node.children) >= 2:
+                            id_member = id_access_node.children[1]
+                            member_node = id_member.children[1] if getattr(id_member, 'children', None) and len(id_member.children) > 1 else None
                             member_id = getattr(member_node, 'value', None)
                             if member_id is not None:
                                 self._validate_struct_member_access(identifier, member_id)
@@ -1919,8 +2011,9 @@ class SemanticAnalyzer:
         """Handle id_access (e.g. .member or [index]). Set flag so member name is not reported as undeclared."""
         if not node.children:
             return
-        # id_access → . id (struct member access)
-        if len(node.children) >= 2 and node.children[0] == '.':
+        # id_access → dimension id_member (member exists when id_member is non-empty)
+        member_node = node.children[1] if len(node.children) > 1 else None
+        if getattr(member_node, 'type', None) == 'id_member' and getattr(member_node, 'children', None):
             self._in_struct_member_access = True
             try:
                 for child in node.children:
@@ -2026,15 +2119,17 @@ class SemanticAnalyzer:
                     base_type = self._get_expression_type(first)
                     if not base_type:
                         return None
-                    # Check id_tail for id_access [ '.', member_id ]
+                    # Check id_tail for member access through id_access -> dimension id_member
                     if id_tail.children:
                         id_access = id_tail.children[0]
-                        if id_access.type == 'id_access' and len(id_access.children) >= 2 and id_access.children[0] == '.':
-                            member_id_node = id_access.children[1]
-                            if hasattr(member_id_node, 'value'):
-                                member_type = self._validate_struct_member_access(first.value, member_id_node.value)
-                                if member_type is not None:
-                                    return member_type
+                        if id_access.type == 'id_access' and len(id_access.children) >= 2:
+                            id_member = id_access.children[1]
+                            if getattr(id_member, 'type', None) == 'id_member' and getattr(id_member, 'children', None):
+                                member_id_node = id_member.children[1] if len(id_member.children) > 1 else None
+                                if hasattr(member_id_node, 'value'):
+                                    member_type = self._validate_struct_member_access(first.value, member_id_node.value)
+                                    if member_type is not None:
+                                        return member_type
                         # Array indexing: id_access -> dimension -> row_size
                         if id_access.type == 'id_access' and id_access.children and hasattr(id_access.children[0], 'type') and id_access.children[0].type == 'dimension':
                             dim = id_access.children[0]

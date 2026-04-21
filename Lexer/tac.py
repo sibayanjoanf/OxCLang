@@ -34,6 +34,8 @@ class TACInstr:
             return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.result)})"
         if self.op == "DECL_NORM":
             return f"(DECL_NORM, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
+        if self.op in {"DECL_STRUCT", "DECL_STRUCT_INIT", "DECL_STRUCT_ARRAY", "DECL_STRUCT_ARRAY_INIT"}:
+            return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
         if self.op == "ASSIGN_WITH_ACCESS":
             return f"(ASSIGN_WITH_ACCESS, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
         if self.op in {"INDEX_LOAD", "STORE_INDEX"}:
@@ -517,19 +519,45 @@ class TACGenerator:
         self._emit("LABEL", result=L_end)
 
     def _gen_for_init(self, node: ASTNode) -> None:
-        # for_init -> [data_type_node, id_no, for_vals]
-        # In your parser: ASTNode('for_init', children=[data_type_node, id_no, for_vals_node])
-        if not node.children or len(node.children) != 3:
+        # Supported parser shapes:
+        # 1) declaration form: [data_type_node, id_no, for_vals_node]
+        # 2) assignment form: [id_no, id_access_node, operator('='), for_vals_node]
+        if not node.children:
             raise NotImplementedError("Unsupported for_init format")
 
-        data_type_node, id_no, for_vals_node = node.children
-        data_type = getattr(data_type_node, "value", None)
-        vid = getattr(id_no, "value", None)
-        if data_type is None or vid is None:
-            raise ValueError("for_init missing data_type or identifier")
+        ch = node.children
 
-        init_place = self._gen_for_vals_as_place(for_vals_node)
-        self._emit("ASSIGN", arg1=init_place, result=vid)
+        # echo(int i = 0~ ...)
+        if len(ch) == 3 and getattr(ch[0], "type", None) == "data_type":
+            data_type_node, id_no, for_vals_node = ch
+            data_type = getattr(data_type_node, "value", None)
+            vid = getattr(id_no, "value", None)
+            if data_type is None or vid is None:
+                raise ValueError("for_init missing data_type or identifier")
+            init_place = self._gen_for_vals_as_place(for_vals_node)
+            self._emit("ASSIGN", arg1=init_place, result=vid)
+            return
+
+        # echo(i = 0~ ...) or echo(arr[idx] = x~ ...)
+        if len(ch) == 4:
+            id_no, id_access_node, op_node, for_vals_node = ch
+            op = getattr(op_node, "value", None)
+            if op != "=":
+                raise NotImplementedError("Unsupported for_init assignment operator")
+
+            vid = getattr(id_no, "value", None)
+            if vid is None:
+                vid = self._identifier_token_type_from_identifier_node(id_no)
+
+            init_place = self._gen_for_vals_as_place(for_vals_node)
+            dim = self._dimension_node_from_id_access(id_access_node)
+            if dim is not None:
+                self._emit("STORE_INDEX", arg1=vid, arg2=dim, result=init_place)
+            else:
+                self._emit("ASSIGN", arg1=init_place, result=vid)
+            return
+
+        raise NotImplementedError("Unsupported for_init format")
 
     def _gen_for_vals_as_place(self, node: ASTNode) -> Any:
         """
@@ -572,8 +600,67 @@ class TACGenerator:
         inner = node.children[0]
         if getattr(inner, "type", None) == "normal":
             self._gen_normal_decl(inner)
+        elif getattr(inner, "type", None) == "structure":
+            self._gen_structure_decl(inner)
         else:
             raise NotImplementedError(f"Declaration type not supported in TAC: {getattr(inner,'type',None)}")
+
+    def _gen_structure_decl(self, node: ASTNode) -> None:
+        """
+        structure -> [struct_type_id, struct_tail]
+        struct_tail forms:
+          - definition: { data_type id~ ... }
+          - instance: id <struct_tail2>
+        struct_tail2 forms:
+          - = {<1d_element>}                      (single struct init)
+          - [<size>] <struct_tail3>               (array of structs)
+          - empty                                 (single struct default)
+        struct_tail3 forms:
+          - = {<2d_element>}                      (array of structs init rows)
+          - empty
+        """
+        if not getattr(node, "children", None) or len(node.children) < 2:
+            return
+        struct_type_id = node.children[0].value
+        struct_tail = node.children[1]
+        if getattr(struct_tail, "type", None) != "struct_tail" or not getattr(struct_tail, "children", None):
+            return
+
+        first = struct_tail.children[0]
+        # Structure type definition has no runtime effect in TAC.
+        if getattr(first, "type", None) == "data_type":
+            return
+
+        # Instance/array declaration: first child is variable id
+        if getattr(first, "type", None) != "identifier":
+            return
+        var_id = first.value
+        struct_tail2 = struct_tail.children[1] if len(struct_tail.children) > 1 else None
+        st2_type = getattr(struct_tail2, "type", None)
+
+        if st2_type in (None, "struct_tail2_empty"):
+            self._emit("DECL_STRUCT", arg1=struct_type_id, result=var_id)
+            return
+
+        if st2_type != "struct_tail2" or not getattr(struct_tail2, "children", None):
+            self._emit("DECL_STRUCT", arg1=struct_type_id, result=var_id)
+            return
+
+        st2_first = struct_tail2.children[0]
+        # gust S x = {...}~
+        if getattr(st2_first, "type", None) == "operator" and getattr(st2_first, "value", None) == "=":
+            init_1d = struct_tail2.children[1] if len(struct_tail2.children) > 1 else None
+            self._emit("DECL_STRUCT_INIT", arg1=struct_type_id, arg2=init_1d, result=var_id)
+            return
+
+        # gust S arr[size] <struct_tail3>
+        size_node = st2_first
+        st3 = struct_tail2.children[1] if len(struct_tail2.children) > 1 else None
+        if getattr(st3, "type", None) == "struct_tail3" and getattr(st3, "children", None):
+            init_2d = st3.children[1] if len(st3.children) > 1 else None
+            self._emit("DECL_STRUCT_ARRAY_INIT", arg1=struct_type_id, arg2=(size_node, init_2d), result=var_id)
+        else:
+            self._emit("DECL_STRUCT_ARRAY", arg1=struct_type_id, arg2=size_node, result=var_id)
 
     def _gen_normal_decl(self, node: ASTNode) -> None:
         # normal -> [data_type, id_no, norm_dec, norm_tail] where id_no/norm_dec/norm_tail might be nested
@@ -633,6 +720,16 @@ class TACGenerator:
             return first
         return None
 
+    def _id_member_node_from_id_access(self, id_access_node: Optional[ASTNode]) -> Optional[ASTNode]:
+        if not id_access_node or not getattr(id_access_node, "children", None):
+            return None
+        if len(id_access_node.children) < 2:
+            return None
+        second = id_access_node.children[1]
+        if getattr(second, "type", None) == "id_member" and getattr(second, "children", None):
+            return second
+        return None
+
     def _id_access_has_dimension(self, id_access_node: Optional[ASTNode]) -> bool:
         return self._dimension_node_from_id_access(id_access_node) is not None
 
@@ -690,6 +787,12 @@ class TACGenerator:
         rhs_place = self._gen_expr_value(expr_node)
 
         dim = self._dimension_node_from_id_access(id_access)
+        member = self._id_member_node_from_id_access(id_access)
+
+        # Member assignment (x.a = rhs, arr[i].a = rhs) must preserve access path.
+        if member is not None:
+            self._emit("ASSIGN_WITH_ACCESS", arg1=vid, arg2=id_access, result=assignment_node)
+            return
 
         if dim is not None:
             if op == "=":

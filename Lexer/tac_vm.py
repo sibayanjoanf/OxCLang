@@ -272,6 +272,80 @@ class TACVM:
                 self.runtime._declare_one(instr.result, instr.arg1, instr.arg2)
                 continue
 
+            if op == "DECL_STRUCT":
+                # arg1=struct_type token-id, result=var id
+                struct_type = instr.arg1
+                members = self.semantic.get_structure(struct_type) if self.semantic else {}
+                obj: Dict[str, Any] = {}
+                for m_name, m_type in (members or {}).items():
+                    obj[self.runtime._scope_key(m_name)] = self.runtime._default_value(m_type)
+                self.runtime._assign(instr.result, obj)
+                continue
+
+            if op == "DECL_STRUCT_INIT":
+                # arg1=struct_type token-id, arg2=1d initializer AST, result=var id
+                struct_type = instr.arg1
+                init_1d_node = instr.arg2
+                members = self.semantic.get_structure(struct_type) if self.semantic else {}
+                obj: Dict[str, Any] = {}
+                member_names = list((members or {}).keys())
+                for m_name, m_type in (members or {}).items():
+                    obj[self.runtime._scope_key(m_name)] = self.runtime._default_value(m_type)
+                vals = self.runtime._collect_1d_init_values(init_1d_node)
+                for i, raw in enumerate(vals):
+                    if i >= len(member_names):
+                        break
+                    mk = member_names[i]
+                    mt = members[mk]
+                    obj[self.runtime._scope_key(mk)] = self.runtime._coerce_to(mt, raw)
+                self.runtime._assign(instr.result, obj)
+                continue
+
+            if op == "DECL_STRUCT_ARRAY":
+                # arg1=struct_type token-id, arg2=size AST, result=array var id
+                struct_type = instr.arg1
+                size_node = instr.arg2
+                members = self.semantic.get_structure(struct_type) if self.semantic else {}
+                size = self.runtime._eval_size_to_int(size_node)
+                if size is None or size < 0:
+                    size = 0
+                arr: List[Dict[str, Any]] = []
+                for _ in range(size):
+                    obj: Dict[str, Any] = {}
+                    for m_name, m_type in (members or {}).items():
+                        obj[self.runtime._scope_key(m_name)] = self.runtime._default_value(m_type)
+                    arr.append(obj)
+                self.runtime._assign(instr.result, arr)
+                continue
+
+            if op == "DECL_STRUCT_ARRAY_INIT":
+                # arg1=struct_type token-id, arg2=(size AST, 2d-init AST), result=array var id
+                struct_type = instr.arg1
+                size_node, init_2d_node = instr.arg2
+                members = self.semantic.get_structure(struct_type) if self.semantic else {}
+                member_names = list((members or {}).keys())
+                size = self.runtime._eval_size_to_int(size_node)
+                if size is None or size < 0:
+                    size = 0
+                arr: List[Dict[str, Any]] = []
+                for _ in range(size):
+                    obj: Dict[str, Any] = {}
+                    for m_name, m_type in (members or {}).items():
+                        obj[self.runtime._scope_key(m_name)] = self.runtime._default_value(m_type)
+                    arr.append(obj)
+                rows = self.runtime._collect_2d_init_rows(init_2d_node)
+                for r, row in enumerate(rows):
+                    if r >= len(arr):
+                        break
+                    for i, raw in enumerate(row):
+                        if i >= len(member_names):
+                            break
+                        mk = member_names[i]
+                        mt = members[mk]
+                        arr[r][self.runtime._scope_key(mk)] = self.runtime._coerce_to(mt, raw)
+                self.runtime._assign(instr.result, arr)
+                continue
+
             if op == "ASSIGN_WITH_ACCESS":
                 # arg1=vid, arg2=id_access node, result=assignment AST
                 self.runtime._exec_assignment_with_access(instr.arg1, instr.arg2, instr.result)

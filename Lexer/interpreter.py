@@ -300,6 +300,88 @@ class Interpreter:
     def _exec_declaration(self, node, resume_child_index: int = 0) -> Any:
         return self._exec_generic(node, resume_child_index=resume_child_index)
 
+    def _exec_structure(self, node, resume_child_index: int = 0) -> Any:
+        """
+        Execute structure declarations:
+        - gust T { ... }~                 -> type definition only, no runtime value
+        - gust T x~                       -> default struct instance
+        - gust T x = {...}~               -> initialized struct instance
+        - gust T arr[n]~                  -> array of struct instances
+        - gust T arr[n] = {{...},{...}}~  -> initialized array of structs
+        """
+        if not getattr(node, "children", None) or len(node.children) < 2:
+            return None
+        struct_type = node.children[0].value
+        struct_tail = node.children[1]
+        if getattr(struct_tail, "type", None) != "struct_tail" or not getattr(struct_tail, "children", None):
+            return None
+
+        first = struct_tail.children[0]
+        # Type definition only: gust T { int a~ ... }~
+        if getattr(first, "type", None) == "data_type":
+            return None
+
+        # Variable declaration path: gust T var ...
+        if getattr(first, "type", None) != "identifier":
+            return None
+        var_id = first.value
+        st2 = struct_tail.children[1] if len(struct_tail.children) > 1 else None
+
+        # Precompute member schema from semantic table.
+        members = self.semantic.get_structure(struct_type) if self.semantic else None
+        if members is None:
+            members = {}
+
+        def make_default_struct() -> Dict[str, Any]:
+            obj: Dict[str, Any] = {}
+            for member_name, member_type in members.items():
+                obj[self._scope_key(member_name)] = self._default_value(member_type)
+            return obj
+
+        # gust T var~
+        if st2 is None or getattr(st2, "type", None) == "struct_tail2_empty":
+            self._assign(var_id, make_default_struct())
+            return None
+
+        # gust T var = { ... }~
+        if getattr(st2, "type", None) == "struct_tail2" and getattr(st2, "children", None):
+            st2_first = st2.children[0]
+            if getattr(st2_first, "type", None) == "operator" and getattr(st2_first, "value", None) == "=":
+                values = self._collect_1d_init_values(st2.children[1] if len(st2.children) > 1 else None)
+                out = make_default_struct()
+                member_names = list(members.keys())
+                for i, raw in enumerate(values):
+                    if i >= len(member_names):
+                        break
+                    mn = member_names[i]
+                    mt = members[mn]
+                    out[self._scope_key(mn)] = self._coerce_to(mt, raw)
+                self._assign(var_id, out)
+                return None
+
+            # gust T arr[size] <struct_tail3>
+            size_node = st2_first
+            declared_len = self._eval_size_to_int(size_node)
+            if declared_len is None or declared_len < 0:
+                declared_len = 0
+            arr = [make_default_struct() for _ in range(declared_len)]
+            st3 = st2.children[1] if len(st2.children) > 1 else None
+            if getattr(st3, "type", None) == "struct_tail3" and getattr(st3, "children", None):
+                init_rows = self._collect_2d_init_rows(st3.children[1] if len(st3.children) > 1 else None)
+                member_names = list(members.keys())
+                for r, row_vals in enumerate(init_rows):
+                    if r >= len(arr):
+                        break
+                    for i, raw in enumerate(row_vals):
+                        if i >= len(member_names):
+                            break
+                        mn = member_names[i]
+                        mt = members[mn]
+                        arr[r][self._scope_key(mn)] = self._coerce_to(mt, raw)
+            self._assign(var_id, arr)
+            return None
+        return None
+
     def _exec_normal(self, node, resume_child_index: int = 0) -> Any:
         # children: data_type, identifier, norm_dec, norm_tail
         data_type = node.children[0].value
@@ -461,9 +543,10 @@ class Interpreter:
         if not id_access_node or not getattr(id_access_node, "children", None):
             return self._exec_assignment(vid, assignment_node)
         first = id_access_node.children[0]
-        if getattr(first, "type", None) != "dimension":
-            # struct members not supported yet here; treat as whole-var assignment
-            return self._exec_assignment(vid, assignment_node)
+        member_node = id_access_node.children[1] if len(id_access_node.children) > 1 else None
+        member_id = None
+        if getattr(member_node, "type", None) == "id_member" and getattr(member_node, "children", None):
+            member_id = member_node.children[1].value
 
         # Evaluate RHS first
         op_node = assignment_node.children[0]
@@ -471,8 +554,15 @@ class Interpreter:
         op = op_node.children[0].value
         rhs = self._eval_expr(expr_node)
 
-        # Only '=' supported for element assignment right now
+        # Struct member assignment path (with or without array index).
+        if member_id is not None:
+            return self._assign_struct_member_with_access(vid, first, member_id, op, rhs)
+
+        # Only '=' supported for array element assignment right now
         if op != "=":
+            return self._exec_assignment(vid, assignment_node)
+
+        if getattr(first, "type", None) != "dimension":
             return self._exec_assignment(vid, assignment_node)
 
         # Evaluate indices from dimension -> row_size
@@ -1019,6 +1109,9 @@ class Interpreter:
         if node.children and getattr(node.children[0], "type", None) == "expr":
             return self._eval_expr(node.children[0])
         vid = node.children[0].value
+        id_access = node.children[1] if len(node.children) > 1 else None
+        if id_access and getattr(id_access, "type", None) == "id_access":
+            return self._read_identifier_with_access(vid, id_access)
         return self._lookup(vid)
 
     def _eval_output(self, node) -> Any:
@@ -1148,43 +1241,145 @@ class Interpreter:
         # id_tail may contain id_access (dimension or member). Support array indexing.
         if getattr(tail, "type", None) == "id_tail" and getattr(tail, "children", None):
             id_access = tail.children[0]
-            if getattr(id_access, "type", None) == "id_access" and getattr(id_access, "children", None):
-                first = id_access.children[0]
-                if getattr(first, "type", None) == "dimension":
-                    indices = self._eval_dimension_indices(first)
-                    val = self._lookup(id_no)
-                    if not indices:
-                        return val
-                    if not isinstance(val, list):
-                        # Language extension: allow scalar string indexing (s[i]) -> char.
-                        if isinstance(val, str):
-                            if len(indices) != 1:
-                                raise InterpreterError(
-                                    f"String indexing on '{self.semantic.get_actual_name(id_no)}' supports only one index"
-                                )
-                            i = indices[0]
-                            if i < 0 or i >= len(val):
-                                raise InterpreterError("String index out of bounds")
-                            return val[i]
-                        if val is None and self._lookup_declared_type(id_no) == "string":
-                            raise InterpreterError(
-                                f"Cannot index uninitialized string '{self.semantic.get_actual_name(id_no)}'"
-                            )
-                        raise InterpreterError(f"'{self.semantic.get_actual_name(id_no)}' is not an array")
-                    if len(indices) == 1:
-                        i = indices[0]
-                        if i < 0 or i >= len(val):
-                            raise InterpreterError("Array out of bounds")
-                        return val[i]
-                    if len(indices) == 2:
-                        r, c = indices
-                        if r < 0 or r >= len(val) or not isinstance(val[r], list):
-                            raise InterpreterError("Array out of bounds")
-                        if c < 0 or c >= len(val[r]):
-                            raise InterpreterError("Array out of bounds")
-                        return val[r][c]
+            if getattr(id_access, "type", None) == "id_access":
+                return self._read_identifier_with_access(id_no, id_access)
         # plain variable reference
         return self._lookup(id_no)
+
+    def _read_identifier_with_access(self, id_no: str, id_access) -> Any:
+        if not getattr(id_access, "children", None):
+            return self._lookup(id_no)
+        dim_node = id_access.children[0] if len(id_access.children) > 0 else None
+        member_node = id_access.children[1] if len(id_access.children) > 1 else None
+        member_id = None
+        if getattr(member_node, "type", None) == "id_member" and getattr(member_node, "children", None):
+            member_id = member_node.children[1].value
+
+        if member_id is not None:
+            return self._read_struct_member_with_access(id_no, dim_node, member_id)
+
+        if getattr(dim_node, "type", None) == "dimension":
+            return self.read_indexed_value(id_no, dim_node)
+        return self._lookup(id_no)
+
+    def _read_struct_member_with_access(self, id_token_type: str, dim_node, member_id: str) -> Any:
+        member_key = self._scope_key(member_id)
+        base = self._lookup(id_token_type)
+        target = base
+        if getattr(dim_node, "type", None) == "dimension":
+            indices = self._eval_dimension_indices(dim_node)
+            if len(indices) != 1:
+                raise InterpreterError("Array out of bounds")
+            i = indices[0]
+            if not isinstance(base, list):
+                raise InterpreterError(f"'{self.semantic.get_actual_name(id_token_type)}' is not an array")
+            if i < 0 or i >= len(base):
+                raise InterpreterError("Array out of bounds")
+            target = base[i]
+        if not isinstance(target, dict):
+            raise InterpreterError(f"'{self.semantic.get_actual_name(id_token_type)}' is not a structure")
+        if member_key not in target:
+            raise InterpreterError(
+                f"'{self.semantic.get_actual_name(member_id)}' is not a member of structure '{self.semantic.get_actual_name(id_token_type)}'"
+            )
+        return target[member_key]
+
+    def _assign_struct_member_with_access(self, id_token_type: str, dim_node, member_id: str, op: str, rhs: Any) -> None:
+        base = self._lookup(id_token_type)
+        target = base
+        if getattr(dim_node, "type", None) == "dimension":
+            indices = self._eval_dimension_indices(dim_node)
+            if len(indices) != 1:
+                raise InterpreterError("Array out of bounds")
+            i = indices[0]
+            if not isinstance(base, list):
+                raise InterpreterError(f"'{self.semantic.get_actual_name(id_token_type)}' is not an array")
+            if i < 0 or i >= len(base):
+                raise InterpreterError("Array out of bounds")
+            target = base[i]
+        if not isinstance(target, dict):
+            raise InterpreterError(f"'{self.semantic.get_actual_name(id_token_type)}' is not a structure")
+
+        member_key = self._scope_key(member_id)
+        if member_key not in target:
+            raise InterpreterError(
+                f"'{self.semantic.get_actual_name(member_id)}' is not a member of structure '{self.semantic.get_actual_name(id_token_type)}'"
+            )
+
+        # Resolve declared member type when possible; fall back to current runtime type.
+        member_type = None
+        symbol = self.semantic.lookup(id_token_type) if self.semantic else None
+        struct_type = symbol.get("struct_type") if isinstance(symbol, dict) else None
+        members = self.semantic.get_structure(struct_type) if (self.semantic and struct_type) else None
+        if members:
+            for mk, mt in members.items():
+                if self._scope_key(mk) == member_key:
+                    member_type = mt
+                    break
+
+        def coerce_member(v: Any) -> Any:
+            if member_type is not None:
+                return self._coerce_to(member_type, v)
+            curv = target.get(member_key)
+            if isinstance(curv, bool):
+                return self._coerce_to("bool", v)
+            if isinstance(curv, int):
+                return self._coerce_to("int", v)
+            if isinstance(curv, float):
+                return self._coerce_to("float", v)
+            if isinstance(curv, str):
+                # Keep single-char as char-like, otherwise string.
+                return self._coerce_to("char" if len(curv) == 1 else "string", v)
+            return v
+
+        cur = target[member_key]
+        if op == "=":
+            target[member_key] = coerce_member(rhs)
+            return
+        if op == "+=":
+            target[member_key] = coerce_member((cur if cur is not None else 0) + rhs)
+            return
+        if op == "-=":
+            target[member_key] = coerce_member((cur if cur is not None else 0) - rhs)
+            return
+        if op == "*=":
+            target[member_key] = coerce_member((cur if cur is not None else 0) * rhs)
+            return
+        if op == "/=":
+            if rhs == 0:
+                raise InterpreterError("Division by zero")
+            cur_val = cur if cur is not None else 0
+            if isinstance(cur_val, int) and isinstance(rhs, int):
+                target[member_key] = coerce_member(cur_val // rhs)
+            else:
+                target[member_key] = coerce_member(cur_val / rhs)
+            return
+        if op == "%=":
+            if rhs == 0:
+                raise InterpreterError("Modulo by zero")
+            cur_val = cur if cur is not None else 0
+            target[member_key] = coerce_member(cur_val % rhs)
+
+    def _eval_size_to_int(self, size_node) -> Optional[int]:
+        # size -> arith_expr | empty
+        if size_node is None:
+            return None
+        if getattr(size_node, "type", None) == "size" and getattr(size_node, "children", None):
+            try:
+                return int(self._to_arith_value(self._eval_arith(size_node.children[0])))
+            except Exception:
+                return None
+        return None
+
+    def _collect_1d_init_values(self, node) -> List[Any]:
+        out: List[Any] = []
+        self._collect_array_init_1d(node, out)
+        return out
+
+    def _collect_2d_init_rows(self, node) -> List[List[Any]]:
+        rows: List[List[Any]] = []
+        self._collect_array_init_2d(node, rows)
+        return rows
 
     def read_indexed_value(self, id_token_type: str, dimension_node) -> Any:
         """
@@ -1469,6 +1664,39 @@ class Interpreter:
             inner = match.group(1).strip()
             if not inner:
                 return match.group(0)
+
+            # struct member forms:
+            #   name.member
+            #   name[i].member
+            m_struct = re.fullmatch(
+                r"([A-Za-z][A-Za-z0-9_]*)\s*(\[(.*?)\])?\s*\.\s*([A-Za-z][A-Za-z0-9_]*)\s*",
+                inner,
+            )
+            if m_struct:
+                base_name = m_struct.group(1)
+                idx_raw = m_struct.group(3)
+                member_name = m_struct.group(4)
+                base_tok = reverse_ids.get(base_name)
+                if not base_tok:
+                    return match.group(0)
+                base_val = self._lookup(base_tok)
+                target = base_val
+                if idx_raw is not None:
+                    if not isinstance(base_val, list):
+                        return match.group(0)
+                    idx = _resolve_index_atom(idx_raw)
+                    if idx < 0 or idx >= len(base_val):
+                        raise InterpreterError("Array out of bounds")
+                    target = base_val[idx]
+                if not isinstance(target, dict):
+                    return match.group(0)
+
+                # Struct runtime objects are keyed by actual member name via _scope_key.
+                member_key = member_name
+                if member_key not in target:
+                    return match.group(0)
+                v = target[member_key]
+                return "" if v is None else str(v)
 
             # Support name, name[i], name[i][j] (no function calls in v3)
             m = re.fullmatch(r"([A-Za-z][A-Za-z0-9_]*)\s*(\[(.*?)\])?\s*(\[(.*?)\])?\s*", inner)

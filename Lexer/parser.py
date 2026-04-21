@@ -517,11 +517,10 @@ class Parser:
         current = self.peek()
 
         if current == '=':
-            self.match('=')
-            self.match('{')
-            twod_element_node = self.parse_2d_element()
-            self.match('}')
-            return ASTNode('struct_tail3', children=[ASTNode('operator', value='='), twod_element_node])
+            self.error(
+                "Invalid gust array initialization: arrays of gust cannot be initialized with '{}' at declaration; declare first and assign via arr[index].member"
+            )
+            raise StopIteration
         elif current == '~':
             return ASTNode('struct_tail3_empty')
         else:
@@ -760,7 +759,7 @@ class Parser:
             return ASTNode('dimension', children=[row_size_node])
         elif current in ['~', '++', '--', '=', '+=', '-=', '*=', '/=', '%=',
                         '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=',
-                        ',', ')', '||', '&&', '}', '&' ]:
+                        ',', ')', '||', '&&', '}', '&', '.' ]:
             return ASTNode('dimension_empty')
         else:
             self.error(f"Unexpected token: '{current}' | Expected '~', '++', '--', '=', '+=', '-=', '*=', '/=', '%=', '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=', ')', '}}', '&'")
@@ -824,7 +823,7 @@ class Parser:
             return ASTNode('col_size', children=[pdim_size_node])
         elif current in ['~', '++', '--', '=', '+=', '-=', '*=', '/=', '%=',
                         '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=',
-                        ',', ')', '||', '&&', '}', '&' ]:
+                        ',', ')', '||', '&&', '}', '&', '.' ]:
             return ASTNode('col_size_empty')
         else:
             self.error(f"Unexpected token: '{current}' | Expected '[', '}}', identifier, '~', '=', '+=', '-=', '*=', '/=', '%=', '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=' , '&' statement, or 'gasp', ")
@@ -1256,63 +1255,25 @@ class Parser:
 
     def parse_id_access(self, prodNo):
         current = self.peek()
-
-        if prodNo in [100, 169]:
-            if current in ['[', '~', ')']:
-                dimension_node = self.parse_dimension()
-                return ASTNode('id_access', children=[dimension_node])
-            elif current == '.':
-                id_member_node = self.parse_id_member()
-                return ASTNode('id_access', children=[id_member_node])
-            else:
-                self.error(f"Unexpected token: '{current}' | Expected [, ., or ')' to close")
-                raise StopIteration
-            
-        if prodNo == 181:
-            if current in ['[', '=']:
-                dimension_node = self.parse_dimension()
-                return ASTNode('id_access', children=[dimension_node])
-            elif current == '.':
-                id_member_node = self.parse_id_member()
-                return ASTNode('id_access', children=[id_member_node])
-            else:
-                self.error(f"Unexpected token: '{current}' | Expected [, ., or '='")
-                raise StopIteration
-
-                
-        if prodNo == 188:
-            if current in ['[', '~']:
-                dimension_node = self.parse_dimension()
-                return ASTNode('id_access', children=[dimension_node])
-            elif current == '.':
-                id_member_node = self.parse_id_member()
-                return ASTNode('id_access', children=[id_member_node])
-            else:
-                self.error(f"Unexpected token: '{current}' | Expected [, ., or ~ after identifier, got '{current}'")
-                raise StopIteration
-
+        # Grammar v4: id_access -> dimension id_member
+        # Parse dimension first when possible; if current is '.', treat as empty dimension.
         if current in ['[', '~', '++', '--', '=','+=', '-=', '*=', '/=', '%=',
-                         '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=',',', ')', '||', '&&', '}', '&']:
+                        '+', '-', '*', '/', '%', ']', '>', '<', '>=', '<=', '==', '!=',
+                        ',', ')', '||', '&&', '}', '&', '.']:
             dimension_node = self.parse_dimension()
-            return ASTNode('id_access', children=[dimension_node])
-        elif current == '.':
             id_member_node = self.parse_id_member()
-            return ASTNode('id_access', children=[id_member_node])
+            return ASTNode('id_access', children=[dimension_node, id_member_node])
 
+        expected = "+, -, *, /, %, ||, &&, &"
+        if not self.rela_used:
+            expected += ", >, <, >=, <=, ==, !="
+        if self.paren_depth > 0:
+            self.error(f"Unexpected token: '{current}' | Expected {expected}, or ) to close")
+        elif self.in_array_size:
+            self.error(f"Unexpected token: '{current}' | Expected {expected}, or ] to close")
         else:
-            expected = "+, -, *, /, %, ||, &&, &"
-            if not self.rela_used:
-                expected += ", >, <, >=, <=, ==, !="
-            if self.paren_depth > 0:
-                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ) to close")
-
-            elif self.in_array_size:
-                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ] to close")
-
-            else:
-                self.error(f"Unexpected token: '{current}' | Expected {expected}, or ~ to terminate statement")
-
-            raise StopIteration
+            self.error(f"Unexpected token: '{current}' | Expected {expected}, or ~ to terminate statement")
+        raise StopIteration
 
 
     # Production 94: <id_member> → .id
