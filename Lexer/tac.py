@@ -824,8 +824,8 @@ class TACGenerator:
         if kind == "inhale":
             vid = node.children[1].value
             id_access = node.children[2] if len(node.children) > 2 else None
-            dim = self._dimension_node_from_id_access(id_access)
-            self._emit("INHALE", arg1=dim, result=vid)
+            # Keep full id_access so TAC runtime can handle inhale(arr[i].member).
+            self._emit("INHALE", arg1=id_access, result=vid)
             return
         if kind == "exhale":
             output_node = node.children[1]

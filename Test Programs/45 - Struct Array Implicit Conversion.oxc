@@ -1,0 +1,28 @@
+/~ Test 4: Array of Gusts & Implicit Conversion ~/ 
+
+atmosphere() {
+    gust Player {
+        float health~
+        int score~
+        char tier~
+    }~
+
+    // Array declaration (allocated first)
+    gust Player team[10]~
+
+    // Player 0 assignments (same index)
+    team[0].health = 100~      // int -> float
+    team[0].score = 'A'~       // char -> int (ASCII 65)
+    team[0].tier = 83~         // int -> char ('S')
+
+    // Player 1 assignments (same index)
+    team[1].health = 85.5~
+    team[1].score = 42~
+    team[1].tier = 'B'~
+
+    exhale("--- Test 4: Array of Gusts ---")~
+    exhale("\nPlayer 0 Score (ASCII of A): @{team[0].score}")~
+    exhale("\nPlayer 0 Tier (ASCII 83): @{team[0].tier}")~
+    exhale("\nPlayer 1 Health: @{team[1].health}")~
+    exhale("\nPlayer 1 Tier: @{team[1].tier}\n")~
+}

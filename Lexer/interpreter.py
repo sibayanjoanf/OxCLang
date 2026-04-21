@@ -28,6 +28,8 @@ class InputRequest:
     prompt: str = ""
     # If set, inhale targets arr[i] / arr[r][c] (AST node type 'dimension').
     dimension_node: Any = None
+    # Full id_access node when inhale targets arr[i].member or other access forms.
+    id_access_node: Any = None
 
 
 class InterpreterError(Exception):
@@ -93,11 +95,9 @@ class Interpreter:
         # Echo the raw input so the transcript keeps the full history
         # (prompt from exhale + this line of input).
         self.emit(str(user_text) + "\n")
+        id_access = getattr(self.input_request, "id_access_node", None)
         dim = getattr(self.input_request, "dimension_node", None)
-        if dim is not None:
-            self.assign_indexed_value(target_id, dim, value)
-        else:
-            self._assign(target_id, value)
+        self.assign_input_target(target_id, value, id_access_node=id_access, dimension_node=dim)
 
         self.waiting_for_input = False
         self.input_request = None
@@ -601,6 +601,7 @@ class Interpreter:
             if vid is None:
                 return None
             dim = None
+            id_access = None
             if len(node.children) > 2:
                 id_access = node.children[2]
                 if id_access and getattr(id_access, "children", None):
@@ -608,7 +609,12 @@ class Interpreter:
                     if getattr(first, "type", None) == "dimension":
                         dim = first
             self.waiting_for_input = True
-            self.input_request = InputRequest(target_identifier=vid, prompt="", dimension_node=dim)
+            self.input_request = InputRequest(
+                target_identifier=vid,
+                prompt="",
+                dimension_node=dim,
+                id_access_node=id_access,
+            )
             return None
         if kind == "exhale":
             out_node = node.children[1]
@@ -1452,6 +1458,36 @@ class Interpreter:
             arr[r][c] = coerced
             return
 
+    def assign_input_target(self, id_token_type: str, value: Any, id_access_node=None, dimension_node=None) -> None:
+        """
+        Assign inhale input target:
+        - plain variable: inhale(x)
+        - indexed array: inhale(arr[i])
+        - struct member / indexed struct member: inhale(obj.member), inhale(arr[i].member)
+        """
+        # Prefer full id_access when available (supports struct members).
+        if id_access_node is not None and getattr(id_access_node, "children", None):
+            member_node = id_access_node.children[1] if len(id_access_node.children) > 1 else None
+            member_id = None
+            if getattr(member_node, "type", None) == "id_member" and getattr(member_node, "children", None):
+                member_id_node = member_node.children[1] if len(member_node.children) > 1 else None
+                member_id = getattr(member_id_node, "value", None) if member_id_node is not None else None
+            if member_id is not None:
+                dim_node = id_access_node.children[0] if len(id_access_node.children) > 0 else None
+                self._assign_struct_member_with_access(id_token_type, dim_node, member_id, "=", value)
+                return
+            first = id_access_node.children[0] if len(id_access_node.children) > 0 else None
+            if getattr(first, "type", None) == "dimension":
+                self.assign_indexed_value(id_token_type, first, value)
+                return
+
+        # Backward-compatible path (dimension only).
+        if dimension_node is not None:
+            self.assign_indexed_value(id_token_type, dimension_node, value)
+            return
+
+        self._assign(id_token_type, value)
+
     def _eval_function_call(self, node) -> Any:
         """Evaluate predefined built-in: toRise, toFall, horizon, sizeOf, toInt, toFloat, toString, toChar, toBool, waft."""
         name = getattr(node, "value", None)
@@ -1646,6 +1682,13 @@ class Interpreter:
         for token_type, actual in id_map.items():
             reverse_ids[actual] = token_type
 
+        def _lookup_by_actual_name(name: str):
+            # Scopes store keys by actual/lexeme name via _scope_key.
+            for scope in reversed(self.scopes):
+                if name in scope:
+                    return scope[name]
+            return None
+
         def _resolve_index_atom(atom: str) -> int:
             atom = atom.strip()
             if atom == "":
@@ -1655,9 +1698,13 @@ class Interpreter:
                 return int(atom)
             # identifier as index
             tok = reverse_ids.get(atom)
-            if not tok:
+            if tok:
+                v = self._lookup(tok)
+                return int(v)
+            # Fallback for variables that may not map cleanly in identifier_map
+            v = _lookup_by_actual_name(atom)
+            if v is None:
                 raise InterpreterError(f"Undefined variable '{atom}' in string interpolation")
-            v = self._lookup(tok)
             return int(v)
 
         def repl(match: re.Match) -> str:
@@ -1677,9 +1724,12 @@ class Interpreter:
                 idx_raw = m_struct.group(3)
                 member_name = m_struct.group(4)
                 base_tok = reverse_ids.get(base_name)
-                if not base_tok:
-                    return match.group(0)
-                base_val = self._lookup(base_tok)
+                if base_tok:
+                    base_val = self._lookup(base_tok)
+                else:
+                    base_val = _lookup_by_actual_name(base_name)
+                    if base_val is None:
+                        return match.group(0)
                 target = base_val
                 if idx_raw is not None:
                     if not isinstance(base_val, list):
@@ -1707,9 +1757,12 @@ class Interpreter:
             i2 = m.group(5)
 
             token_type = reverse_ids.get(name)
-            if not token_type:
-                return match.group(0)
-            val = self._lookup(token_type)
+            if token_type:
+                val = self._lookup(token_type)
+            else:
+                val = _lookup_by_actual_name(name)
+                if val is None:
+                    return match.group(0)
 
             if i1 is None and i2 is None:
                 return "" if val is None else str(val)

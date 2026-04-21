@@ -90,10 +90,8 @@ class TACVM:
         self.runtime.emit(str(user_text) + "\n")
 
         dim = self.input_request.dimension_node if self.input_request else None
-        if dim is not None:
-            self.runtime.assign_indexed_value(vid, dim, value)
-        else:
-            self.runtime._assign(vid, value)
+        id_access = self.input_request.id_access_node if self.input_request else None
+        self.runtime.assign_input_target(vid, value, id_access_node=id_access, dimension_node=dim)
 
         self.waiting_for_input = False
         self.input_request = None
@@ -216,10 +214,24 @@ class TACVM:
 
             if op == "INHALE":
                 vid = instr.result
-                dim = instr.arg1  # AST 'dimension' or None for scalar inhale
+                id_access = instr.arg1  # AST 'id_access' or None
+                dim = None
+                if id_access is not None and getattr(id_access, "type", None) == "dimension":
+                    # Backward compatibility if older TAC passes dimension directly.
+                    dim = id_access
+                    id_access = None
+                elif id_access is not None and getattr(id_access, "children", None):
+                    first = id_access.children[0]
+                    if getattr(first, "type", None) == "dimension":
+                        dim = first
                 self.waiting_for_input = True
                 self._target_identifier = vid
-                self.input_request = InputRequest(target_identifier=vid, prompt="", dimension_node=dim)
+                self.input_request = InputRequest(
+                    target_identifier=vid,
+                    prompt="",
+                    dimension_node=dim,
+                    id_access_node=id_access,
+                )
                 return
 
             if op == "EXHALE":
