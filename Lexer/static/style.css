@@ -445,7 +445,7 @@ span {
 #runOutputPanel {
     flex: 1;
     min-height: 280px;
-    max-height: 60vh;
+    max-height: 100vh;
     padding: 12px 15px;
     overflow-y: auto;
     overflow-x: hidden;
