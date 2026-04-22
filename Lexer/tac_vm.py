@@ -407,9 +407,21 @@ class TACVM:
                 b = self._get_value(instr.arg2)
 
                 if op == "+":
-                    a = self._to_numeric_value(a)
-                    b = self._to_numeric_value(b)
-                    res = a + b
+                    # String concatenation path (lowered from OxC '&' in TAC).
+                    # Keep arithmetic '+' behavior for pure numeric operands.
+                    if instr.value_type == "string" or isinstance(a, str) or isinstance(b, str):
+                        def _to_oxc_text(v: Any) -> str:
+                            if v is None:
+                                return ""
+                            if isinstance(v, bool):
+                                return "yuh" if v else "naur"
+                            return str(v)
+
+                        res = _to_oxc_text(a) + _to_oxc_text(b)
+                    else:
+                        a = self._to_numeric_value(a)
+                        b = self._to_numeric_value(b)
+                        res = a + b
                 elif op == "-":
                     a = self._to_numeric_value(a)
                     b = self._to_numeric_value(b)
