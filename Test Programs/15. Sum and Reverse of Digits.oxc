@@ -1,26 +1,41 @@
 atmosphere(){
-  int num, num2, sum, digit~
+  int num, temp, digit, sum~
+  bool isNeg = naur~
+
   exhale("Enter a number: ")~
   inhale(num)~
-  
-  num2 = num~
-  cycle(num != 0){
-    digit = num % 10~
-    sum += digit~
-    num /= 10~
+
+  if (num < 0){
+    isNeg = yuh~
+    num = num * -1~
   }
 
-  string str = toString(num2)~
-  string rev = ""~
-  int i~
-  
-  i = horizon(str) - 1~
+  sum = 0~
+  temp = num~
 
-  cycle(i >= 0){
-    rev = rev & toString(str[i])~
-    i--~
+  cycle(temp > 0){
+    digit = temp % 10~
+    sum = sum + digit~
+    temp = temp / 10~
   }
 
-  exhale("\nSum of digits = @{sum}")~
-  exhale("\nReverse: @{rev}")~
+  exhale("\nSum of digits: @{sum}")~
+  exhale("\nReverse of digits: ")~
+
+  if (isNeg){
+    exhale("-")~
+  }
+
+  temp = num~
+
+  if (temp == 0){
+    exhale("0")~
+  } else {
+    cycle(temp > 0){
+      digit = temp % 10~
+      exhale("@{digit}")~
+      temp = temp / 10~
+    }
+  }
+  exhale("\n")~
 }

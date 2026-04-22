@@ -1,0 +1,72 @@
+air vacuum sortNums(int arr[], int size, int chcOrder, int chcSort) {
+  if(chcSort == 1) {
+    echo(int i = 0~ i < size - 1~ i++~) {
+      echo(int j = 0~ j < size - i - 1~ j++~) {
+        bool swap = naur~
+        if(chcOrder == 1 && arr[j] > arr[j+1]) { swap = yuh~ }
+        if(chcOrder == 2 && arr[j] < arr[j+1]) { swap = yuh~ }
+        
+        if(swap == yuh) {
+          int temp = arr[j]~
+          arr[j] = arr[j+1]~
+          arr[j+1] = temp~
+        }
+      }
+    }
+  } 
+
+  elseif(chcSort == 2) {
+    echo(int i = 0~ i < size - 1~ i++~) {
+      int J = i + 1~
+      echo(int j = J~ j < size~ j++~) {
+        bool swap = naur~
+        if(chcOrder == 1 && arr[i] > arr[j]) { swap = yuh~ }
+        if(chcOrder == 2 && arr[i] < arr[j]) { swap = yuh~ }
+        
+        if(swap == yuh) {
+          int temp = arr[i]~
+          arr[i] = arr[j]~
+          arr[j] = temp~
+        }
+      }
+    }
+  }
+}
+
+atmosphere(){
+  int arrA[5], arrB[5], arrC[10]~
+  int chcOrder, chcSort~
+
+  exhale("============= Array A =============\n")~
+  echo(int a = 0~ a < 5~ a++~){
+    int A = a + 1~
+    exhale("Enter #@{A}: ")~
+    inhale(arrA[a])~
+    arrC[a] = arrA[a]~
+  }
+
+  exhale("\n============= Array B =============\n")~
+  echo(int b = 0~ b < 5~ b++~){
+    int B = b + 1~
+    exhale("Enter #@{B}: ")~
+    inhale(arrB[b])~
+    arrC[b + 5] = arrB[b]~
+  }
+
+  exhale("\n============== Order ==============\n")~
+  exhale("[1] Ascending\n[2] Descending\nSelect: ")~
+  inhale(chcOrder)~
+  
+  exhale("\n============== Sort ===============\n")~
+  exhale("[1] Bubble Sort\n[2] Balloon Sort\nSelect: ")~
+  inhale(chcSort)~
+
+  sortNums(arrC, 10, chcOrder, chcSort)~
+
+  exhale("\n============= Array C ==============\n")~
+  echo(int k = 0~ k < 10~ k++~){
+    exhale(arrC[k])~
+    exhale(", ")~
+  }
+  exhale("\n===================================\n")~
+}

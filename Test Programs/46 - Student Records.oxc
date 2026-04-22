@@ -1,0 +1,134 @@
+universal gust Student{
+  string name~
+  string studentNumber~
+  string course~
+}~
+
+atmosphere(){
+  gust Student records[100]~
+  int count = 0~
+  int choice~
+
+  string searchID~
+  bool found~
+  int editChoice~
+
+  cycle(yuh){
+    exhale("[1] Add  [2] Display [3] Search \n[4] Edit [5] Delete  [6] Exit\n")~
+    exhale("Enter choice: ")~
+    inhale(choice)~
+
+    // ADD
+    if (choice == 1){
+      exhale("Enter name: ")~
+      inhale(records[count].name)~
+
+      exhale("Enter student number: ")~
+      inhale(records[count].studentNumber)~
+
+      exhale("Enter course: ")~
+      inhale(records[count].course)~
+
+      count++~
+      exhale("Record added!\n")~
+
+    // DISPLAY
+    } elseif (choice == 2){      
+      if (count == 0){
+        exhale("No records available.\n")~
+      } else {
+        echo(int i = 0~ i < count~ i++~){
+          int j = i + 1~
+          exhale("\nStudent @{j}:\n")~
+          exhale("Name: @{records[i].name}\n")~
+          exhale("Student No: @{records[i].studentNumber}\n")~
+          exhale("Course: @{records[i].course}\n")~
+        }
+      }
+
+    // SEARCH
+    } elseif (choice == 3){      
+      found = naur~
+
+      exhale("Enter student number to search: ")~
+      inhale(searchID)~
+
+      echo(int i = 0~ i < count~ i++~){
+        if (records[i].studentNumber == searchID){
+          exhale("\nRecord Found:\n")~
+          exhale("Name: @{records[i].name}\n")~
+          exhale("Student No: @{records[i].studentNumber}\n")~
+          exhale("Course: @{records[i].course}\n")~
+          found = yuh~
+        }
+      }
+      if (!(found)){
+        exhale("Record not found.\n")~
+      }
+
+    // EDIT
+    } elseif (choice == 4){     
+      found = naur~
+
+      exhale("Enter student number to edit: ")~
+      inhale(searchID)~
+
+      echo(int i = 0~ i < count~ i++~){
+        if (records[i].studentNumber == searchID){
+          found = yuh~
+
+          exhale("Edit:\n1 - Name\n2 - Course\nEnter choice: ")~
+          inhale(editChoice)~
+
+          if (editChoice == 1) {
+            exhale("Enter new name: ")~
+            inhale(records[i].name)~
+            exhale("Name updated!\n")~
+          } elseif (editChoice == 2) {
+            exhale("Enter new course: ")~
+            inhale(records[i].course)~
+            exhale("Course updated!\n")~
+          } else {
+            exhale("Invalid edit choice.\n")~
+          }
+        }
+      }
+
+      if (!(found)){
+        exhale("Record not found.\n")~
+      }
+
+    // DELETE
+    } elseif (choice == 5){
+      found = naur~
+
+      exhale("Enter student number to delete: ")~
+      inhale(searchID)~
+
+      echo(int i = 0~ i < count~ i++~){
+        if (records[i].studentNumber == searchID){
+          found = yuh~
+
+          echo(int j = i~ j < count - 1~ j++~){
+            records[j] = records[j + 1]~
+          }
+
+          count--~
+          exhale("Record deleted!\n")~
+          resist~
+
+        }
+      }
+
+      if (!(found)){
+        exhale("Record not found.\n")~
+      }
+    // EXIT
+    } elseif (choice == 6){      
+      exhale("Exiting program...\n")~
+      resist~
+    } else {
+      exhale("Invalid choice.\n")~
+    }
+  }
+}

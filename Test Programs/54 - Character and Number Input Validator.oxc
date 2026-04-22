@@ -1,0 +1,46 @@
+atmosphere(){
+  int chc~
+  string input, charInput~
+
+  exhale("[1] Number Series\n[2] Character Series\n\nSelect: ")~
+  inhale(chc)~
+
+  if(chc < 1 || chc > 2){
+    exhale("Invalid input!\n\n")~
+  } elseif(chc == 1){
+    bool numAgain = naur~
+    exhale("\n")~
+    do{
+      exhale("Enter a number: ")~
+      inhale(input)~
+      int inputz = input[0]~
+
+      if((input[0] >= 48 && input[0] <= 57) || inputz == 45){
+        numAgain = yuh~
+      } else {
+        numAgain = naur~
+      }
+    } cycle(numAgain == yuh)~
+    exhale("Oops...That's not a number.")~
+
+  } elseif(chc == 2){
+    bool charAgain = naur~
+    exhale("\n")~
+    do{
+      exhale("Enter a character: ")~
+      inhale(charInput)~
+
+      int charLen = horizon(charInput)~
+      if(charLen == 1){
+        if(charInput[0] < 48 || charInput[0] > 57){
+          charAgain = yuh~
+        } else {
+          charAgain = naur~
+        }
+      } else {
+        charAgain = naur~
+      }
+    } cycle(charAgain == yuh)~
+    exhale("Oops...That's not a character.")~
+  }
+}

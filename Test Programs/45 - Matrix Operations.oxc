@@ -1,0 +1,111 @@
+atmosphere(){
+  int n~
+  string nStr~
+  int choice~
+
+  // SIZE INPUT
+  cycle(yuh){
+    exhale("Enter matrix size: ")~
+    inhale(nStr)~
+
+    if (horizon(nStr) == 0){
+      exhale("Invalid input.\n")~
+    } else {
+      n = toInt(nStr)~
+      if (n <= 0){
+        exhale("Size must be positive.\n")~
+      } else {
+        resist~
+      }
+    }
+  }
+
+  int A[n][n], B[n][n], C[n][n], M[n][n], T[n][n]~
+
+  exhale("\nMatrix A:\n")~
+  echo(int i = 0~ i < n~ i++~){
+    echo(int j = 0~ j < n~ j++~){
+      exhale("A[@{i}][@{j}]: ")~
+      inhale(A[i][j])~
+    }
+  }
+
+  exhale("\nMatrix B:\n")~
+  echo(int i = 0~ i < n~ i++~){
+    echo(int j = 0~ j < n~ j++~){
+      exhale("B[@{i}][@{j}]: ")~
+      inhale(B[i][j])~
+    }
+  }
+
+  // MENU
+  cycle(yuh){
+    exhale("\n[1] Add [2] Multiply [3] Transpose [4] Display [5] Exit\n")~
+    exhale("Enter choice: ")~
+    inhale(choice)~
+
+    // ADD
+    if (choice == 1){
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          C[i][j] = A[i][j] + B[i][j]~
+        }
+      }
+      exhale("\nA + B:\n")~
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          exhale("@{C[i][j]} ")~
+        }
+        exhale("\n")~
+      }
+
+    // MULTIPLY
+    } elseif (choice == 2){
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          M[i][j] = A[i][j] * B[i][j]~
+        }
+      }
+
+      exhale("\nA * B:\n")~
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          exhale("@{M[i][j]} ")~
+        }
+        exhale("\n")~
+      }
+    } elseif (choice == 3){
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+        int temp = A[i][j]~
+        A[i][j] = B[i][j]~
+        B[i][j] = temp~
+        }
+      }
+      exhale("Matrices A and B have been swapped.\n")~
+
+  // DISPLAY
+    } elseif (choice == 4){
+      exhale("\nMatrix A:\n")~
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          exhale("@{A[i][j]} ")~
+        }
+        exhale("\n")~
+      }
+
+      exhale("\nMatrix B:\n")~
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          exhale("@{B[i][j]} ")~
+        }
+        exhale("\n")~
+      }
+    } elseif (choice == 5){
+      exhale("Exiting...\n")~
+      resist~
+    } else {
+      exhale("Invalid choice.\n")~
+    }
+  }
+}

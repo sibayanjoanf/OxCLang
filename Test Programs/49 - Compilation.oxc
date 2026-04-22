@@ -1,0 +1,722 @@
+universal gust Student{
+  string name~
+  string studentNumber~
+  string course~
+}~
+
+// MATRIX 
+air vacuum matrixOps(){
+  exhale("Selected: Matrix\n")~
+  int n~
+  string nStr~
+  int choice~
+
+  cycle(yuh){
+    exhale("Enter matrix size: ")~
+    inhale(nStr)~
+
+    if (horizon(nStr) == 0){
+      exhale("Invalid input.\n")~
+    } elseif (toInt(nStr) <= 0){
+      exhale("Size must be positive.\n")~
+    } else {
+      n = toInt(nStr)~
+      resist~
+    }
+  }
+
+  int A[n][n], B[n][n], C[n][n], M[n][n]~
+
+  exhale("\nMatrix A:\n")~
+  echo(int i = 0~ i < n~ i++~){
+    echo(int j = 0~ j < n~ j++~){
+      exhale("A[@{i}][@{j}]: ")~
+      inhale(A[i][j])~
+    }
+  }
+
+  exhale("\nMatrix B:\n")~
+  echo(int i = 0~ i < n~ i++~){
+    echo(int j = 0~ j < n~ j++~){
+      exhale("B[@{i}][@{j}]: ")~
+      inhale(B[i][j])~
+    }
+  }
+
+  cycle(yuh){
+    exhale("\n[1] Add [2] Multiply [3] Transpose [4] Display [5] Exit\nEnter choice: ")~
+    inhale(choice)~
+
+    if (choice == 1){
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          C[i][j] = A[i][j] + B[i][j]~
+        }
+      }
+      exhale("\nA + B:\n")~
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          exhale("@{C[i][j]} ")~
+        }
+        exhale("\n")~
+      }
+
+    } elseif (choice == 2){
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          M[i][j] = A[i][j] * B[i][j]~
+        }
+      }
+
+      exhale("\nA * B:\n")~
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          exhale("@{M[i][j]} ")~
+        }
+        exhale("\n")~
+      }
+
+    } elseif (choice == 3){
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          int temp = A[i][j]~
+          A[i][j] = B[i][j]~
+          B[i][j] = temp~
+        }
+      }
+      exhale("Matrices swapped.\n")~
+
+    } elseif (choice == 4){
+      exhale("\nMatrix A:\n")~
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          exhale("@{A[i][j]} ")~
+        }
+        exhale("\n")~
+      }
+
+      exhale("\nMatrix B:\n")~
+      echo(int i = 0~ i < n~ i++~){
+        echo(int j = 0~ j < n~ j++~){
+          exhale("@{B[i][j]} ")~
+        }
+        exhale("\n")~
+      }
+
+    } elseif (choice == 5){
+      resist~
+    } else {
+      exhale("Invalid choice.\n")~
+    }
+  }
+}
+
+// STUDENT 
+air vacuum studentRecords(){
+  exhale("Selected: Student Records\n")~
+  gust Student records[100]~
+  int count = 0~
+  int choice~
+
+  string searchID~
+  bool found~
+  int editChoice~
+
+  cycle(yuh){
+    exhale("[1] Add  [2] Display [3] Search \n[4] Edit [5] Delete  [6] Exit\n")~
+    exhale("Enter choice: ")~
+    inhale(choice)~
+
+    // ADD
+    if (choice == 1){
+      exhale("Enter name: ")~
+      inhale(records[count].name)~
+
+      exhale("Enter student number: ")~
+      inhale(records[count].studentNumber)~
+
+      exhale("Enter course: ")~
+      inhale(records[count].course)~
+
+      count++~
+      exhale("Record added!\n")~
+
+    // DISPLAY
+    } elseif (choice == 2){      
+      if (count == 0){
+        exhale("No records available.\n")~
+      } else {
+        echo(int i = 0~ i < count~ i++~){
+          int j = i + 1~
+          exhale("\nStudent @{j}:\n")~
+          exhale("Name: @{records[i].name}\n")~
+          exhale("Student No: @{records[i].studentNumber}\n")~
+          exhale("Course: @{records[i].course}\n")~
+        }
+      }
+
+    // SEARCH
+    } elseif (choice == 3){      
+      found = naur~
+
+      exhale("Enter student number to search: ")~
+      inhale(searchID)~
+
+      echo(int i = 0~ i < count~ i++~){
+        if (records[i].studentNumber == searchID){
+          exhale("\nRecord Found:\n")~
+          exhale("Name: @{records[i].name}\n")~
+          exhale("Student No: @{records[i].studentNumber}\n")~
+          exhale("Course: @{records[i].course}\n")~
+          found = yuh~
+        }
+      }
+      if (!(found)){
+        exhale("Record not found.\n")~
+      }
+
+    // EDIT
+    } elseif (choice == 4){     
+      found = naur~
+
+      exhale("Enter student number to edit: ")~
+      inhale(searchID)~
+
+      echo(int i = 0~ i < count~ i++~){
+        if (records[i].studentNumber == searchID){
+          found = yuh~
+
+          exhale("Edit:\n1 - Name\n2 - Course\nEnter choice: ")~
+          inhale(editChoice)~
+
+          if (editChoice == 1) {
+            exhale("Enter new name: ")~
+            inhale(records[i].name)~
+            exhale("Name updated!\n")~
+          } elseif (editChoice == 2) {
+            exhale("Enter new course: ")~
+            inhale(records[i].course)~
+            exhale("Course updated!\n")~
+          } else {
+            exhale("Invalid edit choice.\n")~
+          }
+        }
+      }
+
+      if (!(found)){
+        exhale("Record not found.\n")~
+      }
+
+    // DELETE
+    } elseif (choice == 5){
+      found = naur~
+
+      exhale("Enter student number to delete: ")~
+      inhale(searchID)~
+
+      echo(int i = 0~ i < count~ i++~){
+        if (records[i].studentNumber == searchID){
+          found = yuh~
+
+          echo(int j = i~ j < count - 1~ j++~){
+            records[j] = records[j + 1]~
+          }
+
+          count--~
+          exhale("Record deleted!\n")~
+          resist~
+
+        }
+      }
+
+      if (!(found)){
+        exhale("Record not found.\n")~
+      }
+    // EXIT
+    } elseif (choice == 6){      
+      exhale("Exiting program...\n")~
+      resist~
+    } else {
+      exhale("Invalid choice.\n")~
+    }
+  }
+}
+
+// BANKING
+air vacuum bankingSystem(){
+  exhale("Selected: Banking System\n")~
+  int nClient = 0~
+  string cStr~
+
+  exhale("Enter number of clients (Max 5): ")~
+  inhale(cStr)~
+  if (horizon(cStr) == 0){
+    nClient = 1~
+  } else {
+    nClient = toInt(cStr)~
+  }
+
+  if (nClient > 5){
+    exhale("Limit reached. Setting to 5 clients.\n")~
+    nClient = 5~
+  } elseif (nClient <= 0){
+    exhale("Invalid number of clients. Setting to 1.\n")~
+    nClient = 1~
+  }
+
+  echo(int c = 0~ c < nClient~ c++~){
+
+    string name~
+    string accNum~
+    string tDate~
+    int nTx = 0~
+    float bal = 0.0~
+    string sumLog = " "~ 
+
+    exhale("\n--- Client Setup ---\n")~
+
+    // NAME VALIDATION
+    bool vName = naur~
+    cycle(!(vName)){
+      exhale("Client Name: ")~
+      inhale(name)~
+      int nLen = horizon(name)~
+
+      if (nLen == 0){
+        exhale("Error: Name cannot be empty.\n")~
+      } else {
+        bool hasSym = naur~
+        echo(int i = 0~ i < nLen~ i++~){
+          char ch = name[i]~
+          bool isOk = naur~
+          if (ch >= 'A' && ch <= 'Z'){ isOk = yuh~ }
+          if (ch >= 'a' && ch <= 'z'){ isOk = yuh~ }
+          if (ch == ' '){ isOk = yuh~ }
+          if (isOk == naur){ hasSym = yuh~ }
+        }
+        if (hasSym == yuh){
+          exhale("Error: Invalid symbol detected in Name.\n")~
+        } else {
+          vName = yuh~
+        }
+      }
+    }
+
+    // ACCOUNT NUMBER VALIDATION
+    bool vAcc = naur~
+    cycle(!(vAcc)){
+      exhale("Account Number (Max 15): ")~
+      inhale(accNum)~
+      int accLen = horizon(accNum)~
+
+      if (accLen == 0){
+        exhale("Error: Account number cannot be empty.\n")~
+      } elseif (accLen > 15){
+        exhale("Error: Account number exceeds 15 characters.\n")~
+      } else {
+        bool hasSym = naur~
+        echo(int i = 0~ i < accLen~ i++~){
+          char ch = accNum[i]~
+          bool isOk = naur~
+          if (ch >= '0' && ch <= '9'){ isOk = yuh~ }
+          if (ch >= 'A' && ch <= 'Z'){ isOk = yuh~ }
+          if (ch >= 'a' && ch <= 'z'){ isOk = yuh~ }
+          if (isOk == naur){ hasSym = yuh~ }
+        }
+        if (hasSym == yuh){
+          exhale("Error: Invalid symbol detected.\n")~
+        } else {
+          vAcc = yuh~
+        }
+      }
+    }
+
+    // DATE VALIDATION
+    bool vDate = naur~
+    cycle(!(vDate)){
+      exhale("Date: ")~
+      inhale(tDate)~
+      int dLen = horizon(tDate)~
+
+      if (dLen == 0){
+        exhale("Error: Date cannot be empty.\n")~
+      } else {
+        bool hasSym = naur~
+        echo(int i = 0~ i < dLen~ i++~){
+          char ch = tDate[i]~
+          bool isOk = naur~
+          if (ch >= '0' && ch <= '9'){ isOk = yuh~ }
+          if (ch >= 'A' && ch <= 'Z'){ isOk = yuh~ }
+          if (ch >= 'a' && ch <= 'z'){ isOk = yuh~ }
+          if (ch == '/'){ isOk = yuh~ }
+          if (ch == '-'){ isOk = yuh~ }
+          if (isOk == naur){ hasSym = yuh~ }
+        }
+        if (hasSym == yuh){
+          exhale("Error: Invalid symbol detected in Date.\n")~
+        } else {
+          vDate = yuh~
+        }
+      }
+    }
+
+    // TRANSACTION NUMBER VALIDATION
+    bool vTx = naur~
+    string txStr~
+    cycle(!(vTx)){
+      exhale("Number of transactions: ")~
+      inhale(txStr)~
+      int txLen = horizon(txStr)~
+
+      if (txLen == 0){
+        exhale("Error: Number of transactions cannot be empty.\n")~
+      } else {
+        bool hasSym = naur~
+        echo(int i = 0~ i < txLen~ i++~){
+          char ch = txStr[i]~
+          bool isOk = naur~
+          if (ch >= '0' && ch <= '9'){ isOk = yuh~ }
+          if (isOk == naur){ hasSym = yuh~ }
+        }
+        if (hasSym == yuh){
+          exhale("Error: Must be a valid number.\n")~
+        } else {
+          nTx = toInt(txStr)~
+          if (nTx <= 0){
+            exhale("Error: Must be greater than 0.\n")~
+          } else {
+            vTx = yuh~
+          }
+        }
+      }
+    }
+
+    int tCnt = 0~
+    bool runTx = yuh~
+
+    cycle(runTx){
+      if (tCnt >= nTx){
+        exhale("\nMax transactions reached for @{name}.\n")~
+        runTx = naur~
+      } else {
+        int opt = 0~
+        string optStr~
+        bool vOpt = naur~
+
+        cycle(!(vOpt)){
+          exhale("\nOptions: 1.Deposit 2.Withdraw 3.Balance 4.Exit\n")~
+          exhale("Choose option: ")~
+          inhale(optStr)~
+          int oLen = horizon(optStr)~
+
+          if (oLen == 0){
+            exhale("Error: Option cannot be empty.\n")~
+          } else {
+            bool oSym = naur~
+            echo(int io = 0~ io < oLen~ io++~){
+              char cho = optStr[io]~
+              bool okO = naur~
+              if (cho >= '0' && cho <= '9'){ okO = yuh~ }
+              if (okO == naur){ oSym = yuh~ }
+            }
+
+            if (oSym == yuh){
+              exhale("Error: Enter a valid number (1-4).\n")~
+            } else {
+              opt = toInt(optStr)~
+              vOpt = yuh~
+            }
+          }
+        }
+
+        if (opt == 1){
+          float dep = 0.0~
+          string valStrDep~
+          bool cleanDep = naur~
+
+          cycle(!(cleanDep)){
+            exhale("Deposit amount: ")~
+            inhale(valStrDep)~
+            int vLenDep = horizon(valStrDep)~
+
+            if (vLenDep == 0){
+              exhale("Error: Amount cannot be empty.\n")~
+            } else {
+              bool symDep = naur~
+              int dotsDep = 0~
+              echo(int iDep = 0~ iDep < vLenDep~ iDep++~){
+                char chDep = valStrDep[iDep]~
+                bool okDep = naur~
+                if (chDep >= '0' && chDep <= '9'){ okDep = yuh~ }
+                if (chDep == '.'){
+                  okDep = yuh~
+                  dotsDep++~
+                }
+                if (okDep == naur){ symDep = yuh~ }
+              }
+
+              if (symDep == yuh){
+                exhale("Error: Enter a clean number.\n")~
+              } elseif (dotsDep > 1){
+                exhale("Error: Too many decimals.\n")~
+              } else {
+                cleanDep = yuh~
+              }
+            }
+          }
+
+          dep = toFloat(valStrDep)~
+
+          if (dep <= 0.0){
+            exhale("Error: Invalid deposit amount.\n")~
+          } elseif (dep > 50000.0){
+            exhale("Declined: Max deposit is 50,000 PHP.\n")~
+          } else {
+            bal = bal + dep~
+            string sDep = waft(dep, 2)~
+            sumLog = "@{sumLog}[Dep: +@{sDep}] "~
+            exhale("Deposit successful.\n")~
+            tCnt++~
+          }
+
+        } elseif (opt == 2){
+          float wdr = 0.0~
+          string valStrWdr~
+          bool cleanWdr = naur~
+
+          cycle(!(cleanWdr)){
+            exhale("Withdraw amount: ")~
+            inhale(valStrWdr)~
+            int vLenWdr = horizon(valStrWdr)~
+
+            if (vLenWdr == 0){
+              exhale("Error: Amount cannot be empty.\n")~
+            } else {
+              bool symWdr = naur~
+              int dotsWdr = 0~
+              echo(int iWdr = 0~ iWdr < vLenWdr~ iWdr++~){
+                char chWdr = valStrWdr[iWdr]~
+                bool okWdr = naur~
+                if (chWdr >= '0' && chWdr <= '9'){ okWdr = yuh~ }
+                if (chWdr == '.'){
+                  okWdr = yuh~
+                  dotsWdr++~
+                }
+                if (okWdr == naur){ symWdr = yuh~ }
+              }
+
+              if (symWdr == yuh){
+                exhale("Error: Enter a clean number.\n")~
+              } elseif (dotsWdr > 1){
+                exhale("Error: Too many decimals.\n")~
+              } else {
+                cleanWdr = yuh~
+              }
+            }
+          }
+
+          wdr = toFloat(valStrWdr)~
+
+          if (wdr <= 0.0){
+            exhale("Error: Invalid withdraw amount.\n")~
+          } elseif (wdr > 20000.0){
+            exhale("Declined: Max withdraw is 20,000 PHP.\n")~
+          } elseif (wdr > bal){
+            exhale("Declined: Insufficient balance.\n")~
+          } else {
+            bal = bal - wdr~
+            string sWdr = waft(wdr, 2)~
+            sumLog = "@{sumLog}[Wdr: -@{sWdr}] "~
+            exhale("Withdraw successful.\n")~
+            tCnt++~
+          }
+
+        } elseif (opt == 3){
+          string sBal = waft(bal, 2)~
+          sumLog = "@{sumLog}[Bal Check] "~
+          exhale("Current Balance: @{sBal} PHP\n")~
+
+        } elseif (opt == 4){
+          exhale("Exiting transactions for @{name}...\n")~
+          runTx = naur~
+
+        } else {
+          exhale("Invalid transaction option.\n")~
+        }
+      }
+    }
+
+    string fBal = waft(bal, 2)~
+
+    exhale("\nTRANSACTION SUMMARY:\n")~
+    exhale("Client Name: @{name}\n")~
+    exhale("Account No: @{accNum}\n")~
+    exhale("Date: @{tDate}\n")~
+    exhale("Final Balance: @{fBal} PHP\n")~
+    exhale("History: @{sumLog}\n")~
+    }
+}
+
+// JEEP
+air vacuum jeepneySystem(){
+  int seats[22]~
+  
+  echo(int i = 0~ i < 22~ i++~) {
+      seats[i] = 0~
+  }
+  
+  int total = 0, seat, num, count, dCount~
+  string location = "Loading"~
+  int choice~
+
+  cycle(yuh){
+    exhale("-- 0 --\nLocation: @{location} Area\n")~
+    exhale("[1] Load [2] Unload [3] Show [4] Exit\nEnter your choice: ")~
+    inhale(choice)~
+
+    if (choice == 1){
+      if (!(location == "Loading")){
+        exhale("Cannot load here. Move to loading area.\n")~
+      } else {
+        exhale("Passengers to load: ")~
+        inhale(num)~
+
+        if (total + num > 22){
+          exhale("Not enough seats.\n")~
+        } else {
+          count = 0~
+          dCount = count + 1~
+
+          cycle(count < num){
+            exhale("Enter seat number for passenger @{dCount} (0-21): ")~
+            inhale(seat)~
+
+            if (seat < 0 || seat >= 22){
+              exhale("Invalid seat number.\n")~
+            } elseif (seats[seat] == 1){
+              exhale("Seat already occupied.\n")~
+            } else {
+              seats[seat] = 1~
+              total++~
+              count++~
+              dCount++~
+            }
+          }
+
+          location = "Unloading"~
+        }
+      }
+    } elseif (choice == 2){
+      if (!(location == "Unloading")){
+        exhale("Cannot unload here. Move to unloading area.\n")~
+      } else {
+
+        exhale("Occupied seats: ")~
+        echo(int i = 0~ i < 22~ i++~){
+          if (seats[i] == 1){
+            exhale("@{i} ")~
+          }
+        }
+        exhale("\n")~
+
+        exhale("Passengers to unload: ")~
+        inhale(num)~
+
+        if (num > total){
+          exhale("Too many to unload.\n")~
+        } elseif (num < 0) { // FIX 1: ADDED MISSING CURLY BRACE HERE
+          exhale("Invalid number.\n")~
+        } else {
+          count = 0~
+          dCount = count + 1~
+
+          cycle(count < num){
+            exhale("Select seat number to unload (#@{dCount}) (0-21): ")~
+            inhale(seat)~
+
+            if (seat < 0 || seat >= 22){
+              exhale("Invalid seat number.\n")~
+            } elseif (seats[seat] == 0){
+              exhale("Vacant seat.\n")~
+            } else {
+              seats[seat] = 0~
+              total--~
+              count++~
+              dCount++~
+            }
+          }
+
+          location = "Loading"~
+        }
+      }
+    } elseif (choice == 3){
+      exhale("    ")~
+
+      if (seats[0] == 1){
+        exhale("0[X] ")~
+      } else {
+        exhale("0[ ] ")~
+      }
+
+      if (seats[1] == 1){
+        exhale("1[X]\n")~
+      } else {
+        exhale("1[ ]\n")~
+      }
+
+      echo(int i = 0~ i < 10~ i++~){
+        int left = i + 2~
+        int right = i + 12~
+
+        if (seats[left] == 1){
+          exhale("@{left}[X]")~
+        } else {
+          exhale("@{left}[ ]")~
+        }
+
+        exhale("     ")~
+
+        if (seats[right] == 1){
+          exhale("@{right}[X]")~
+        } else {
+          exhale("@{right}[ ]")~
+        }
+
+        exhale("\n")~
+      }
+
+      exhale("Total passengers: @{total}\n")~
+    } elseif (choice == 4){
+      exhale("Safe travels!\n")~
+      resist~
+    } else {
+      exhale("Invalid choice.\n")~
+    }
+  }
+}
+
+// MAIN
+atmosphere(){
+  int choice~
+
+  cycle(yuh){
+    exhale("-- MAIN --\n")~
+    exhale("[1] Matrix [2] Students [3] Banking [4] Jeepney [5] Exit\nSelect a program: ")~
+    inhale(choice)~
+
+    if (choice == 1){
+      matrixOps()~
+    } elseif (choice == 2){
+      studentRecords()~
+    } elseif (choice == 3){
+      bankingSystem()~
+    } elseif (choice == 4){
+      jeepneySystem()~
+    } elseif (choice == 5){
+      exhale("Program terminated.")~
+      resist~
+    } else {
+      exhale("Invalid.\n")~
+    }
+  }
+}

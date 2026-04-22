@@ -1,0 +1,129 @@
+atmosphere(){
+  int seats[22]~
+  int total = 0, seat, num, count, dCount~
+  string location = "Loading"~
+  int choice~
+
+  cycle(yuh){
+    exhale("-- 0 --\nLocation: @{location} Area\n")~
+    exhale("[1] Load [2] Unload [3] Show [4] Exit\nEnter your choice: ")~
+    inhale(choice)~
+
+    if (choice == 1){
+      if (!(location == "Loading")){
+        exhale("Cannot load here. Move to loading area.\n")~
+      } else {
+        exhale("Passengers to load: ")~
+        inhale(num)~
+
+        if (total + num > 22){
+          exhale("Not enough seats.\n")~
+        } else {
+          count = 0~
+          dCount = count + 1~
+
+          cycle(count < num){
+            exhale("Enter seat number for passenger @{dCount} (0-21): ")~
+            inhale(seat)~
+
+            if (seat < 0 || seat >= 22){
+              exhale("Invalid seat number.\n")~
+            } elseif (seats[seat] == 1){
+              exhale("Seat already occupied.\n")~
+            } else {
+              seats[seat] = 1~
+              total++~
+              count++~
+              dCount++~
+            }
+          }
+
+          location = "Unloading"~
+        }
+      }
+    } elseif (choice == 2){
+      if (!(location == "Unloading")){
+        exhale("Cannot unload here. Move to unloading area.\n")~
+      } else {
+
+        exhale("Occupied seats: ")~
+        echo(int i = 0~ i < 22~ i++~){
+          if (seats[i] == 1){
+            exhale("@{i} ")~
+          }
+        }
+        exhale("\n")~
+
+        exhale("Passengers to unload: ")~
+        inhale(num)~
+
+        if (num > total){
+          exhale("Too many to unload.\n")~
+        } else {
+          count = 0~
+          dCount = count + 1~
+
+          cycle(count < num){
+            exhale("Select seat number to unload (#@{dCount}) (0-21): ")~
+            inhale(seat)~
+
+            if (seat < 0 || seat >= 22){
+              exhale("Invalid seat number.\n")~
+            } elseif (seats[seat] == 0){
+              exhale("Vacant seat.\n")~
+            } else {
+              seats[seat] = 0~
+              total--~
+              count++~
+              dCount++~
+            }
+          }
+
+          location = "Loading"~
+        }
+      }
+    } elseif (choice == 3){
+      exhale("    ")~
+
+      if (seats[0] == 1){
+        exhale("0[X] ")~
+      } else {
+        exhale("0[ ] ")~
+      }
+
+      if (seats[1] == 1){
+        exhale("1[X]\n")~
+      } else {
+        exhale("1[ ]\n")~
+      }
+
+      echo(int i = 0~ i < 10~ i++~){
+        int left = i + 2~
+        int right = i + 12~
+
+        if (seats[left] == 1){
+          exhale("@{left}[X]")~
+        } else {
+          exhale("@{left}[ ]")~
+        }
+
+        exhale("     ")~
+
+        if (seats[right] == 1){
+          exhale("@{right}[X]")~
+        } else {
+          exhale("@{right}[ ]")~
+        }
+
+        exhale("\n")~
+      }
+
+      exhale("Total passengers: @{total}\n")~
+    } elseif (choice == 4){
+      exhale("Safe travels!")~
+      resist~
+    } else {
+      exhale("Invalid choice.\n")~
+    }
+  }
+}

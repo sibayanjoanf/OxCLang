@@ -1,18 +1,21 @@
 atmosphere(){
-    int rows~
-    exhale("Enter number of rows: ")~
-    inhale(rows)~
+  int rows~
+  exhale("Enter number of rows: ")~
+  inhale(rows)~
 
+  if(rows > 0){
     echo(int i = 0~ i < rows~ i++~){
-        echo(int s = 0~ s < rows - i - 1~ s++~){
-            exhale(" ")~
-        }
-        int num = 1~
-
-        echo(int j = 0~ j <= i~ j++~){
-            exhale("@{num} ")~
-            num = num * (i - j) / (j + 1)~
-        }
-        exhale("\n")~
+      echo(int s = 0~ s < rows - i - 1~ s++~){
+        exhale(" ")~
+      }
+      int num = 1~
+      echo(int j = 0~ j <= i~ j++~){
+        exhale("@{num} ")~
+        num = num * (i - j) / (j + 1)~
+      }
+      exhale("\n")~
     }
+  } else {
+    exhale("Invalid row number.")~
+  }
 }
