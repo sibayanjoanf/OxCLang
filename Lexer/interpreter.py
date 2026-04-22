@@ -137,12 +137,14 @@ class Interpreter:
                     self.pop_scope()
                 else:
                     raise
+            # A resumed function can complete and immediately reach an outer inhale;
+            # finalize pending call as soon as its own continuation frames are done.
+            self._finalize_pending_call_if_ready()
             if self.waiting_for_input:
                 break
         # If a pending function call resumed and completed without explicit ReturnSignal,
         # finish call epilogue now (e.g., vacuum function or implicit return path).
-        if not self.waiting_for_input:
-            self._finalize_pending_call_if_ready()
+        self._finalize_pending_call_if_ready()
 
     def _resume_after_loop_signal(self, is_break: bool) -> None:
         """
@@ -182,7 +184,7 @@ class Interpreter:
         return v
 
     def _finalize_pending_call_if_ready(self) -> None:
-        if self.waiting_for_input or not self._pending_call:
+        if not self._pending_call:
             return
         pending_scope_depth = int(self._pending_call.get("scope_depth", len(self.scopes)))
         # A paused frame at or deeper than pending function scope means we are still
@@ -191,6 +193,11 @@ class Interpreter:
             if frame.scope_depth >= pending_scope_depth:
                 return
         if len(self.scopes) < pending_scope_depth:
+            # Function scope was already unwound (e.g., control-flow exit while
+            # resuming). Treat pending call as finished to avoid stale-call leaks.
+            self._pending_call_result = None
+            self._pending_call = None
+            self._current_function_name = None
             return
         pending = self._pending_call
         func_name = pending["func_name"]
@@ -1038,7 +1045,9 @@ class Interpreter:
         if func_name not in self.functions:
             raise InterpreterError(f"Undefined function '{func_name}'")
         if self._pending_call is not None:
-            raise InterpreterError("Internal error: nested pending function calls are not supported")
+            self._finalize_pending_call_if_ready()
+            if self._pending_call is not None:
+                raise InterpreterError("Internal error: nested pending function calls are not supported")
 
         args = self._eval_param_opts(param_opts_node)
         params = self.function_params.get(func_name, [])
@@ -1191,8 +1200,12 @@ class Interpreter:
             # even if height was stored as a string (e.g. from input).
             if op in ("<", "<=", ">", ">="):
                 try:
-                    left = self._to_arith_value(left)
-                    right = self._to_arith_value(right)
+                    # Coerce both sides atomically; avoid partial conversion that
+                    # can produce mixed-type comparisons (e.g., int >= str).
+                    lnum = self._to_arith_value(left)
+                    rnum = self._to_arith_value(right)
+                    left = lnum
+                    right = rnum
                 except InterpreterError:
                     pass  # fall back to raw comparison
             if op == "==":

@@ -93,7 +93,9 @@ class TACVM:
             self._target_identifier = (
                 self.runtime.input_request.target_identifier if self.runtime.input_request else None
             )
-            if self.waiting_for_input:
+            # If runtime is still waiting and a pending call still exists, we are
+            # paused on deeper function input; keep CALL-resume state.
+            if self.waiting_for_input and getattr(self.runtime, "_pending_call", None) is not None:
                 return
             # Function call finished; commit pending CALL destination now.
             value = self.runtime.consume_pending_call_result()
@@ -104,6 +106,10 @@ class TACVM:
                 self._set_var(dst, value)
             self._waiting_from_call = False
             self._pending_call_dst = None
+            # If function completion advanced into outer inhale, keep that target.
+            if self.waiting_for_input and self.input_request:
+                self._target_identifier = self.input_request.target_identifier
+                return
             self._target_identifier = None
             self._execute_until_pause_or_end()
             return
@@ -706,6 +712,55 @@ def _run_continuation_self_test() -> int:
             ),
             ["1", "1", "9", "2"],
             ["N?1\n", "A0?9\nA0=9\n"],
+        ),
+        (
+            "menu_reenter_function_after_breaking_subloop",
+            (
+                "air vacuum jeepMini(){\n"
+                "    int c~\n"
+                "    cycle(yuh){\n"
+                "        exhale(\"J[1]exit: \")~\n"
+                "        inhale(c)~\n"
+                "        if (c == 1){\n"
+                "            resist~\n"
+                "        }\n"
+                "    }\n"
+                "}\n"
+                "atmosphere(){\n"
+                "    int m~\n"
+                "    cycle(yuh){\n"
+                "        exhale(\"M[3]bank [4]jeep [5]exit: \")~\n"
+                "        inhale(m)~\n"
+                "        if (m == 4){\n"
+                "            jeepMini()~\n"
+                "        } elseif (m == 3){\n"
+                "            jeepMini()~\n"
+                "        } elseif (m == 5){\n"
+                "            resist~\n"
+                "        }\n"
+                "    }\n"
+                "}\n"
+            ),
+            ["4", "1", "3", "1", "5"],
+            ["J[1]exit: 1\n", "J[1]exit: 1\n"],
+        ),
+        (
+            "char_range_relational_no_mixed_type_crash",
+            (
+                "atmosphere(){\n"
+                "    string s~\n"
+                "    exhale(\"S: \")~\n"
+                "    inhale(s)~\n"
+                "    char ch = s[0]~\n"
+                "    if (ch >= 'A' && ch <= 'Z'){\n"
+                "        exhale(\"UP\")~\n"
+                "    } else {\n"
+                "        exhale(\"NO\")~\n"
+                "    }\n"
+                "}\n"
+            ),
+            ["R"],
+            ["S: R\nUP"],
         ),
     ]
 
