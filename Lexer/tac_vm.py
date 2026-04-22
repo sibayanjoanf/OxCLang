@@ -39,6 +39,8 @@ class TACVM:
         self.waiting_for_input: bool = False
         self.input_request: Optional[InputRequest] = None
         self._target_identifier: Optional[str] = None
+        self._waiting_from_call: bool = False
+        self._pending_call_dst: Any = None
 
         # Execution state
         self._tac: List[TACInstr] = []
@@ -61,6 +63,8 @@ class TACVM:
         self.waiting_for_input = False
         self.input_request = None
         self._target_identifier = None
+        self._waiting_from_call = False
+        self._pending_call_dst = None
         self.runtime.waiting_for_input = False
         self.runtime.input_request = None
         self.runtime.output = []
@@ -80,6 +84,29 @@ class TACVM:
 
     def provide_input(self, user_text: str) -> None:
         if not self.waiting_for_input or not self.input_request or not self._target_identifier:
+            return
+
+        if self._waiting_from_call:
+            # Input pause originated inside runtime user-function CALL.
+            self.runtime.provide_input(user_text)
+            self.waiting_for_input = self.runtime.waiting_for_input
+            self.input_request = self.runtime.input_request
+            self._target_identifier = (
+                self.runtime.input_request.target_identifier if self.runtime.input_request else None
+            )
+            if self.waiting_for_input:
+                return
+            # Function call finished; commit pending CALL destination now.
+            value = self.runtime.consume_pending_call_result()
+            dst = self._pending_call_dst
+            if self._is_temp(dst):
+                self._set_temp(dst, value)
+            else:
+                self._set_var(dst, value)
+            self._waiting_from_call = False
+            self._pending_call_dst = None
+            self._target_identifier = None
+            self._execute_until_pause_or_end()
             return
 
         vid = self._target_identifier
@@ -263,6 +290,13 @@ class TACVM:
                 param_opts_node = instr.arg2
                 value = self.runtime._call_user_function(func_id_token_type, param_opts_node)
                 dst = instr.result
+                if self.runtime.waiting_for_input and self.runtime.input_request:
+                    self.waiting_for_input = True
+                    self.input_request = self.runtime.input_request
+                    self._target_identifier = self.input_request.target_identifier
+                    self._waiting_from_call = True
+                    self._pending_call_dst = dst
+                    return
                 if self._is_temp(dst):
                     self._set_temp(dst, value)
                 else:

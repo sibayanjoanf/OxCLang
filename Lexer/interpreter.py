@@ -73,6 +73,10 @@ class Interpreter:
 
         # current function name (set during _call_user_function) so return value can be normalized
         self._current_function_name: Optional[str] = None
+        # Pending user-function call paused by inhale().
+        # Shape: {'func_name': str, 'return_stat': ASTNode}
+        self._pending_call: Optional[Dict[str, Any]] = None
+        self._pending_call_result: Any = None
 
     # -------------------- Public API --------------------
 
@@ -112,8 +116,52 @@ class Interpreter:
                 pass  # resumed inside a loop body; break is valid, treat as done
             except ContinueSignal:
                 pass  # resumed inside a loop body; continue is valid, treat as done
+            except ReturnSignal as r:
+                # Resumed inside a paused function call and reached gasp.
+                if self._pending_call:
+                    self._pending_call_result = self._normalize_return(
+                        r.value, self._pending_call["func_name"]
+                    )
+                    self._pending_call = None
+                    self._current_function_name = None
+                    self.pop_scope()
+                else:
+                    raise
             if self.waiting_for_input:
                 break
+        # If a pending function call resumed and completed without explicit ReturnSignal,
+        # finish call epilogue now (e.g., vacuum function or implicit return path).
+        if not self.waiting_for_input:
+            self._finalize_pending_call_if_ready()
+
+    def consume_pending_call_result(self) -> Any:
+        """Used by TACVM CALL resume path to retrieve function result after inhale."""
+        v = self._pending_call_result
+        self._pending_call_result = None
+        return v
+
+    def _finalize_pending_call_if_ready(self) -> None:
+        if self.waiting_for_input or not self._pending_call:
+            return
+        # Still mid-resume sequence; wait for paused stack to fully drain.
+        if self._paused_stack:
+            return
+        pending = self._pending_call
+        func_name = pending["func_name"]
+        return_stat = pending["return_stat"]
+        result = None
+        rt = getattr(return_stat, "type", None)
+        if rt == "return_stat" or (
+            getattr(return_stat, "children", None) and len(return_stat.children) > 0
+        ):
+            try:
+                self._exec(return_stat)
+            except ReturnSignal as r:
+                result = self._normalize_return(r.value, func_name)
+        self._pending_call_result = result
+        self._pending_call = None
+        self._current_function_name = None
+        self.pop_scope()
 
     # -------------------- Output helpers --------------------
 
@@ -866,6 +914,8 @@ class Interpreter:
         func_name = self.semantic.get_actual_name(func_id_token_type)
         if func_name not in self.functions:
             raise InterpreterError(f"Undefined function '{func_name}'")
+        if self._pending_call is not None:
+            raise InterpreterError("Internal error: nested pending function calls are not supported")
 
         args = self._eval_param_opts(param_opts_node)
         params = self.function_params.get(func_name, [])
@@ -881,35 +931,49 @@ class Interpreter:
 
         self._current_function_name = func_name
         self.push_scope()
+        for (pid, ptype, is_array), aval in zip(params, args):
+            key = self._scope_key(pid)
+            if is_array:
+                if not isinstance(aval, list):
+                    self._current_function_name = None
+                    self.pop_scope()
+                    raise InterpreterError(
+                        f"Argument for array parameter '{self.semantic.get_actual_name(pid)}' must be an array"
+                    )
+                # Arrays are passed by reference: store the list as-is
+                self.scopes[-1][key] = aval
+            else:
+                self.scopes[-1][key] = self._coerce_to(ptype, aval)
         try:
-            for (pid, ptype, is_array), aval in zip(params, args):
-                key = self._scope_key(pid)
-                if is_array:
-                    if not isinstance(aval, list):
-                        raise InterpreterError(
-                            f"Argument for array parameter '{self.semantic.get_actual_name(pid)}' must be an array"
-                        )
-                    # Arrays are passed by reference: store the list as-is
-                    self.scopes[-1][key] = aval
-                else:
-                    self.scopes[-1][key] = self._coerce_to(ptype, aval)
-            try:
-                self._exec(body)
-                # explicit return statement node exists; execute it to return value or nothing
-                rt = getattr(return_stat, "type", None)
-                if rt == "return_stat" or (
-                    getattr(return_stat, "children", None) and len(return_stat.children) > 0
-                ):
-                    try:
-                        self._exec(return_stat)
-                    except ReturnSignal as r:
-                        return self._normalize_return(r.value, func_name)
+            self._exec(body)
+            if self.waiting_for_input:
+                # Keep function scope alive until input-driven resume completes.
+                self._pending_call = {"func_name": func_name, "return_stat": return_stat}
                 return None
-            except ReturnSignal as r:
-                return self._normalize_return(r.value, func_name)
-        finally:
+            # explicit return statement node exists; execute it to return value or nothing
+            rt = getattr(return_stat, "type", None)
+            if rt == "return_stat" or (
+                getattr(return_stat, "children", None) and len(return_stat.children) > 0
+            ):
+                try:
+                    self._exec(return_stat)
+                except ReturnSignal as r:
+                    result = self._normalize_return(r.value, func_name)
+                    self._current_function_name = None
+                    self.pop_scope()
+                    return result
             self._current_function_name = None
             self.pop_scope()
+            return None
+        except ReturnSignal as r:
+            result = self._normalize_return(r.value, func_name)
+            self._current_function_name = None
+            self.pop_scope()
+            return result
+        except Exception:
+            self._current_function_name = None
+            self.pop_scope()
+            raise
 
     def _normalize_return(self, value: Any, func_name: str) -> Any:
         """Ensure function return value matches declared type (e.g. bool -> Python True/False)."""
