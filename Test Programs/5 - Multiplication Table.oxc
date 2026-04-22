@@ -1,4 +1,4 @@
-atmosphere(){
+atmosphere() {
     int row, col, product~
 
     exhale("Enter rows: ")~
@@ -10,7 +10,7 @@ atmosphere(){
     echo(int i = 1~ i <= row~ i++~){
         echo(int j = 1~ j <= col~ j++~){
             product = j * i~
-            exhale("@{j} x @{i} = @{product}\t")~
+            exhale(" @{product}\t")~
         }
         exhale("\n")~
     }
