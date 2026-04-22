@@ -113,9 +113,11 @@ class Interpreter:
             try:
                 self._exec(node, resume_child_index=child_i)
             except BreakSignal:
-                pass  # resumed inside a loop body; break is valid, treat as done
+                # Route break to the nearest paused loop frame.
+                self._resume_after_loop_signal(is_break=True)
             except ContinueSignal:
-                pass  # resumed inside a loop body; continue is valid, treat as done
+                # Route continue to the nearest paused loop frame.
+                self._resume_after_loop_signal(is_break=False)
             except ReturnSignal as r:
                 # Resumed inside a paused function call and reached gasp.
                 if self._pending_call:
@@ -133,6 +135,17 @@ class Interpreter:
         # finish call epilogue now (e.g., vacuum function or implicit return path).
         if not self.waiting_for_input:
             self._finalize_pending_call_if_ready()
+
+    def _resume_after_loop_signal(self, is_break: bool) -> None:
+        """
+        When Break/Continue is raised while resuming from inhale, locate the nearest
+        paused while_loop frame and resume it with control-flow intent.
+        """
+        while self._paused_stack:
+            loop_node, _child_i = self._paused_stack.pop()
+            if getattr(loop_node, "type", None) == "while_loop":
+                self._exec(loop_node, resume_child_index=3 if is_break else 4)
+                return
 
     def consume_pending_call_result(self) -> Any:
         """Used by TACVM CALL resume path to retrieve function result after inhale."""
@@ -784,6 +797,75 @@ class Interpreter:
         if len(node.children) == 4 and getattr(node.children[0], "type", None) == "for_init":
             # for-loop form
             init, cond, update, body = node.children
+            if resume_child_index == 3:
+                # break while resuming inside for-body after inhale
+                self.pop_scope()  # body scope preserved during pause
+                self.pop_scope()  # for-loop outer scope
+                return None
+            if resume_child_index == 4:
+                # continue while resuming inside for-body after inhale
+                self.pop_scope()  # body scope preserved during pause
+                self._exec(update)
+                while self._eval_cond(cond):
+                    try:
+                        self.push_scope()
+                        try:
+                            self._paused_stack.append((node, 2))
+                            self._exec(body)
+                        finally:
+                            if not self.waiting_for_input:
+                                self.pop_scope()
+                                if (
+                                    self._paused_stack
+                                    and self._paused_stack[-1][0] is node
+                                    and self._paused_stack[-1][1] == 2
+                                ):
+                                    self._paused_stack.pop()
+                    except BreakSignal:
+                        self.pop_scope()
+                        return None
+                    except ContinueSignal:
+                        if self.waiting_for_input:
+                            return None
+                        self._exec(update)
+                        continue
+                    if self.waiting_for_input:
+                        return None
+                    self._exec(update)
+                self.pop_scope()  # for-loop outer scope
+                return None
+            if resume_child_index == 2:
+                # resumed after inhale inside for-body; complete current iteration
+                self.pop_scope()  # body scope preserved during pause
+                self._exec(update)
+                while self._eval_cond(cond):
+                    try:
+                        self.push_scope()
+                        try:
+                            self._paused_stack.append((node, 2))
+                            self._exec(body)
+                        finally:
+                            if not self.waiting_for_input:
+                                self.pop_scope()
+                                if (
+                                    self._paused_stack
+                                    and self._paused_stack[-1][0] is node
+                                    and self._paused_stack[-1][1] == 2
+                                ):
+                                    self._paused_stack.pop()
+                    except BreakSignal:
+                        self.pop_scope()
+                        return None
+                    except ContinueSignal:
+                        if self.waiting_for_input:
+                            return None
+                        self._exec(update)
+                        continue
+                    if self.waiting_for_input:
+                        return None
+                    self._exec(update)
+                self.pop_scope()  # for-loop outer scope
+                return None
             self.push_scope()
             try:
                 self._exec(init)
@@ -791,22 +873,63 @@ class Interpreter:
                     try:
                         self.push_scope()
                         try:
+                            self._paused_stack.append((node, 2))
                             self._exec(body)
                         finally:
-                            self.pop_scope()
+                            if not self.waiting_for_input:
+                                self.pop_scope()
+                                if (
+                                    self._paused_stack
+                                    and self._paused_stack[-1][0] is node
+                                    and self._paused_stack[-1][1] == 2
+                                ):
+                                    self._paused_stack.pop()
                     except BreakSignal:
                         break
                     except ContinueSignal:
-                        pass
+                        if self.waiting_for_input:
+                            return None
+                        self._exec(update)
+                        continue
                     if self.waiting_for_input:
                         return None
                     self._exec(update)
             finally:
-                self.pop_scope()
+                if not self.waiting_for_input:
+                    self.pop_scope()
             return None
 
         # while-loop form
         cond, body = node.children
+        if resume_child_index == 3:
+            # break while resuming inside cycle-body after inhale
+            self.pop_scope()  # body scope preserved during pause
+            return None
+        if resume_child_index == 4:
+            # continue while resuming inside cycle-body after inhale
+            self.pop_scope()  # body scope preserved during pause
+            while self._eval_cond(cond):
+                try:
+                    self.push_scope()
+                    try:
+                        self._paused_stack.append((node, 1))
+                        self._exec(body)
+                    finally:
+                        if not self.waiting_for_input:
+                            self.pop_scope()
+                            if (
+                                self._paused_stack
+                                and self._paused_stack[-1][0] is node
+                                and self._paused_stack[-1][1] == 1
+                            ):
+                                self._paused_stack.pop()
+                except BreakSignal:
+                    break
+                except ContinueSignal:
+                    continue
+                if self.waiting_for_input:
+                    return None
+            return None
         # resume_child_index=1: one more iteration (re-eval condition, run body); used when resuming after inhale
         if resume_child_index == 1:
             if not self._eval_cond(cond):
