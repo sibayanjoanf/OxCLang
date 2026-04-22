@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from interpreter import Interpreter, InterpreterError, InputRequest
@@ -325,7 +324,7 @@ class TACVM:
                 obj: Dict[str, Any] = {}
                 for m_name, m_type in (members or {}).items():
                     obj[self.runtime._scope_key(m_name)] = self.runtime._default_value(m_type)
-                self.runtime._assign(instr.result, obj)
+                self.runtime._declare_in_current_scope(instr.result, obj)
                 continue
 
             if op == "DECL_STRUCT_INIT":
@@ -344,7 +343,7 @@ class TACVM:
                     mk = member_names[i]
                     mt = members[mk]
                     obj[self.runtime._scope_key(mk)] = self.runtime._coerce_to(mt, raw)
-                self.runtime._assign(instr.result, obj)
+                self.runtime._declare_in_current_scope(instr.result, obj)
                 continue
 
             if op == "DECL_STRUCT_ARRAY":
@@ -361,7 +360,7 @@ class TACVM:
                     for m_name, m_type in (members or {}).items():
                         obj[self.runtime._scope_key(m_name)] = self.runtime._default_value(m_type)
                     arr.append(obj)
-                self.runtime._assign(instr.result, arr)
+                self.runtime._declare_in_current_scope(instr.result, arr)
                 continue
 
             if op == "DECL_STRUCT_ARRAY_INIT":
@@ -389,7 +388,7 @@ class TACVM:
                         mk = member_names[i]
                         mt = members[mk]
                         arr[r][self.runtime._scope_key(mk)] = self.runtime._coerce_to(mt, raw)
-                self.runtime._assign(instr.result, arr)
+                self.runtime._declare_in_current_scope(instr.result, arr)
                 continue
 
             if op == "ASSIGN_WITH_ACCESS":
@@ -519,4 +518,233 @@ class TACVM:
                 continue
 
             raise TACExecutionError(f"Unsupported TAC instruction op: {op}")
+
+
+def _run_continuation_self_test() -> int:
+    """
+    Debug regression runner for TAC continuation behavior.
+    Kept in tac_vm.py so TAC checks live in an existing TAC file.
+    """
+    from pathlib import Path
+
+    from lexer import Lexer
+    from parser import Parser
+    from semantic import SemanticAnalyzer
+    from tac import TACGenerator
+
+    def _compile(source: str):
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        valid_tokens = [t for t in tokens if not t.is_error]
+        parser = Parser(valid_tokens)
+        ast, syntax_errors = parser.parse()
+        if syntax_errors:
+            raise RuntimeError(f"syntax errors: {[e.message for e in syntax_errors]}")
+        analyzer = SemanticAnalyzer(ast, valid_tokens)
+        sem_errors = analyzer.analyze()
+        if sem_errors:
+            raise RuntimeError(f"semantic errors: {[e.message for e in sem_errors]}")
+        return analyzer, valid_tokens, ast
+
+    def _run_tac(source: str, inputs: List[str]):
+        analyzer, valid_tokens, ast = _compile(source)
+        vm = TACVM(analyzer, valid_tokens, ast_root=ast)
+        tac_code = TACGenerator(ast, analyzer).generate()
+        vm.run_tac(tac_code)
+        input_i = 0
+        while vm.waiting_for_input:
+            if input_i >= len(inputs):
+                raise RuntimeError("TAC runtime requested more input than provided")
+            vm.provide_input(inputs[input_i])
+            input_i += 1
+        if input_i != len(inputs):
+            raise RuntimeError("TAC runtime consumed fewer inputs than provided")
+        return "".join(vm.output), vm.waiting_for_input
+
+    def _load_test_program(filename: str) -> str:
+        root = Path(__file__).resolve().parents[1]
+        return (root / "Test Programs" / filename).read_text(encoding="utf-8")
+
+    cases = [
+        (
+            "matrix_input_loops",
+            _load_test_program("27 - Matrix Addition.oxc"),
+            ["1", "2", "3", "4", "5", "10", "20", "30", "40", "50"],
+            [
+                "Input 5 elements for Array A:\nElement 1: 1\nElement 2: 2\nElement 3: 3\nElement 4: 4\nElement 5: 5\n",
+                "Input 5 elements for Array B:\nElement 1: 10\nElement 2: 20\nElement 3: 30\nElement 4: 40\nElement 5: 50\n",
+                "Sum in Array C: 11 22 33 44 55 ",
+            ],
+        ),
+        (
+            "menu_branch_after_inhale",
+            _load_test_program("17. Areas - Function.oxc"),
+            ["2", "5", "4"],
+            ["Enter base: 5\n", "Enter height:4\n", "Area: 10.0"],
+        ),
+        (
+            "function_inhale_resume",
+            (
+                "air int ask(){\n"
+                "    int x~\n"
+                "    inhale(x)~\n"
+                "    gasp x~\n"
+                "}\n"
+                "atmosphere(){\n"
+                "    int v~\n"
+                "    v = ask()~\n"
+                "    if (v > 10){\n"
+                "        exhale(\"HIGH\")~\n"
+                "    } else {\n"
+                "        exhale(\"LOW\")~\n"
+                "    }\n"
+                "}\n"
+            ),
+            ["11"],
+            ["11\nHIGH"],
+        ),
+        (
+            "struct_search_flow",
+            (
+                "atmosphere(){\n"
+                "    gust Pair { int key~ int value~ }~\n"
+                "    gust Pair arr[3]~\n"
+                "    arr[0].key = 1~ arr[0].value = 10~\n"
+                "    arr[1].key = 2~ arr[1].value = 20~\n"
+                "    arr[2].key = 3~ arr[2].value = 30~\n"
+                "    int needle~\n"
+                "    inhale(needle)~\n"
+                "    int found = -1~\n"
+                "    echo(int i = 0~ i < 3~ i = i + 1~){\n"
+                "        if (arr[i].key == needle){\n"
+                "            found = arr[i].value~\n"
+                "            resist~\n"
+                "        }\n"
+                "    }\n"
+                "    exhale(\"Found=@{found}\")~\n"
+                "}\n"
+            ),
+            ["2"],
+            ["2\nFound=20"],
+        ),
+        (
+            "string_concat_assignment",
+            (
+                "atmosphere(){\n"
+                "    string a = \"A\"~\n"
+                "    a += \"B\"~\n"
+                "    exhale(a)~\n"
+                "}\n"
+            ),
+            [],
+            ["AB"],
+        ),
+        (
+            "menu_multi_function_resume",
+            (
+                "air vacuum a(){\n"
+                "    int x~\n"
+                "    exhale(\"A?\")~\n"
+                "    inhale(x)~\n"
+                "    exhale(\"A=@{x}\\n\")~\n"
+                "}\n"
+                "air vacuum b(){\n"
+                "    int y~\n"
+                "    exhale(\"B?\")~\n"
+                "    inhale(y)~\n"
+                "    exhale(\"B=@{y}\\n\")~\n"
+                "}\n"
+                "atmosphere(){\n"
+                "    int c~\n"
+                "    cycle(yuh){\n"
+                "        exhale(\"[1]A [2]B [3]X: \")~\n"
+                "        inhale(c)~\n"
+                "        if (c == 1){\n"
+                "            a()~\n"
+                "        } elseif (c == 2){\n"
+                "            b()~\n"
+                "        } elseif (c == 3){\n"
+                "            resist~\n"
+                "        }\n"
+                "    }\n"
+                "}\n"
+            ),
+            ["1", "11", "2", "22", "3"],
+            ["A?11\nA=11\n", "B?22\nB=22\n"],
+        ),
+        (
+            "menu_function_validation_loop_then_more_input",
+            (
+                "air vacuum matrixMini(){\n"
+                "    int n~\n"
+                "    string s~\n"
+                "    cycle(yuh){\n"
+                "        exhale(\"N?\")~\n"
+                "        inhale(s)~\n"
+                "        if (toInt(s) > 0){\n"
+                "            n = toInt(s)~\n"
+                "            resist~\n"
+                "        }\n"
+                "    }\n"
+                "    int a[n]~\n"
+                "    exhale(\"A0?\")~\n"
+                "    inhale(a[0])~\n"
+                "    exhale(\"A0=@{a[0]}\\n\")~\n"
+                "}\n"
+                "atmosphere(){\n"
+                "    int c~\n"
+                "    cycle(yuh){\n"
+                "        exhale(\"[1]M [2]X: \")~\n"
+                "        inhale(c)~\n"
+                "        if (c == 1){\n"
+                "            matrixMini()~\n"
+                "        } elseif (c == 2){\n"
+                "            resist~\n"
+                "        }\n"
+                "    }\n"
+                "}\n"
+            ),
+            ["1", "1", "9", "2"],
+            ["N?1\n", "A0?9\nA0=9\n"],
+        ),
+    ]
+
+    failures: List[str] = []
+    for case_name, source, inputs, required_fragments in cases:
+        try:
+            out_a, waiting_a = _run_tac(source, inputs)
+            out_b, waiting_b = _run_tac(source, inputs)
+            if waiting_a or waiting_b:
+                failures.append(f"{case_name}: runtime still waiting for input")
+                continue
+            if out_a != out_b:
+                failures.append(f"{case_name}: non-deterministic output across repeated runs")
+                continue
+            for fragment in required_fragments:
+                if fragment not in out_a:
+                    failures.append(
+                        f"{case_name}: missing expected fragment {fragment!r}\n"
+                        f"  output={out_a!r}"
+                    )
+                    break
+        except Exception as exc:
+            failures.append(f"{case_name}: {exc}")
+
+    if failures:
+        print("FAIL: TAC continuation self-test")
+        for item in failures:
+            print(f"- {item}")
+        return 1
+
+    print("PASS: TAC continuation self-test")
+    for case_name, _source, _inputs, _fragments in cases:
+        print(f"- {case_name}")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    if "--self-test" in sys.argv:
+        raise SystemExit(_run_continuation_self_test())
 

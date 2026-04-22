@@ -32,6 +32,13 @@ class InputRequest:
     id_access_node: Any = None
 
 
+@dataclass
+class ContinuationFrame:
+    node: Any
+    resume_child_index: int
+    scope_depth: int
+
+
 class InterpreterError(Exception):
     def __init__(self, message: str, line: int = 0, column: int = 0):
         super().__init__(message)
@@ -68,13 +75,14 @@ class Interpreter:
         self.input_request: Optional[InputRequest] = None
 
         # pause/resume support
-        self._paused_stack: List[Tuple[Any, int]] = []  # (node, next_child_index)
+        self._paused_stack: List[ContinuationFrame] = []
         self._paused_after_inhale: bool = False
+        self._pending_loop_signal: Optional[str] = None
 
         # current function name (set during _call_user_function) so return value can be normalized
         self._current_function_name: Optional[str] = None
         # Pending user-function call paused by inhale().
-        # Shape: {'func_name': str, 'return_stat': ASTNode}
+        # Shape: {'func_name': str, 'return_stat': ASTNode, 'scope_depth': int}
         self._pending_call: Optional[Dict[str, Any]] = None
         self._pending_call_result: Any = None
 
@@ -109,9 +117,9 @@ class Interpreter:
         # resume from paused point; process stack until we pause again or stack is empty
         self._paused_after_inhale = False
         while self._paused_stack:
-            node, child_i = self._paused_stack.pop()
+            frame = self._paused_stack.pop()
             try:
-                self._exec(node, resume_child_index=child_i)
+                self._exec(frame.node, resume_child_index=frame.resume_child_index)
             except BreakSignal:
                 # Route break to the nearest paused loop frame.
                 self._resume_after_loop_signal(is_break=True)
@@ -142,10 +150,30 @@ class Interpreter:
         paused while_loop frame and resume it with control-flow intent.
         """
         while self._paused_stack:
-            loop_node, _child_i = self._paused_stack.pop()
-            if getattr(loop_node, "type", None) == "while_loop":
-                self._exec(loop_node, resume_child_index=3 if is_break else 4)
+            loop_frame = self._paused_stack.pop()
+            if getattr(loop_frame.node, "type", None) == "while_loop":
+                self._pending_loop_signal = "break" if is_break else "continue"
+                self._exec(loop_frame.node, resume_child_index=loop_frame.resume_child_index)
                 return
+
+    def _push_pause_frame(self, node: Any, resume_child_index: int) -> None:
+        self._paused_stack.append(
+            ContinuationFrame(node=node, resume_child_index=resume_child_index, scope_depth=len(self.scopes))
+        )
+
+    def _insert_pause_frame(self, at_index: int, node: Any, resume_child_index: int) -> None:
+        self._paused_stack.insert(
+            at_index,
+            ContinuationFrame(node=node, resume_child_index=resume_child_index, scope_depth=len(self.scopes)),
+        )
+
+    def _drop_top_pause_frame(self, node: Any, resume_child_index: int) -> None:
+        if (
+            self._paused_stack
+            and self._paused_stack[-1].node is node
+            and self._paused_stack[-1].resume_child_index == resume_child_index
+        ):
+            self._paused_stack.pop()
 
     def consume_pending_call_result(self) -> Any:
         """Used by TACVM CALL resume path to retrieve function result after inhale."""
@@ -156,8 +184,13 @@ class Interpreter:
     def _finalize_pending_call_if_ready(self) -> None:
         if self.waiting_for_input or not self._pending_call:
             return
-        # Still mid-resume sequence; wait for paused stack to fully drain.
-        if self._paused_stack:
+        pending_scope_depth = int(self._pending_call.get("scope_depth", len(self.scopes)))
+        # A paused frame at or deeper than pending function scope means we are still
+        # inside that function's continuation path.
+        for frame in self._paused_stack:
+            if frame.scope_depth >= pending_scope_depth:
+                return
+        if len(self.scopes) < pending_scope_depth:
             return
         pending = self._pending_call
         func_name = pending["func_name"]
@@ -225,6 +258,18 @@ class Interpreter:
             if key in scope:
                 scope[key] = value
                 return
+        self.scopes[-1][key] = value
+
+    def _declare_in_current_scope(self, identifier_token_type: str, value: Any) -> None:
+        """
+        Declare or re-declare a variable in the current scope only.
+        This preserves lexical shadowing (locals must not overwrite outers).
+        """
+        if value == "naur" or getattr(value, "value", None) == "naur":
+            value = False
+        elif value == "yuh" or getattr(value, "value", None) == "yuh":
+            value = True
+        key = self._scope_key(identifier_token_type)
         self.scopes[-1][key] = value
 
     # -------------------- Core execution --------------------
@@ -349,9 +394,16 @@ class Interpreter:
             return None
         for i in range(resume_child_index, len(node.children)):
             child = node.children[i]
+            paused_depth_before = len(self._paused_stack)
             self._exec(child)
             if self.waiting_for_input:
-                self._paused_stack.append((node, i + 1))
+                # Always persist parent sequence continuation. If child already
+                # pushed frames, insert parent below those child frames so child
+                # continuation runs first, then parent resumes at next sibling.
+                if len(self._paused_stack) == paused_depth_before:
+                    self._push_pause_frame(node, i + 1)
+                else:
+                    self._insert_pause_frame(paused_depth_before, node, i + 1)
                 return None
         return None
 
@@ -401,7 +453,7 @@ class Interpreter:
 
         # gust T var~
         if st2 is None or getattr(st2, "type", None) == "struct_tail2_empty":
-            self._assign(var_id, make_default_struct())
+            self._declare_in_current_scope(var_id, make_default_struct())
             return None
 
         # gust T var = { ... }~
@@ -417,7 +469,7 @@ class Interpreter:
                     mn = member_names[i]
                     mt = members[mn]
                     out[self._scope_key(mn)] = self._coerce_to(mt, raw)
-                self._assign(var_id, out)
+                self._declare_in_current_scope(var_id, out)
                 return None
 
             # gust T arr[size] <struct_tail3>
@@ -439,7 +491,7 @@ class Interpreter:
                         mn = member_names[i]
                         mt = members[mn]
                         arr[r][self._scope_key(mn)] = self._coerce_to(mt, raw)
-            self._assign(var_id, arr)
+            self._declare_in_current_scope(var_id, arr)
             return None
         return None
 
@@ -468,18 +520,18 @@ class Interpreter:
     def _exec_const_dec_one(self, data_type: str, id_no: str, const_dec) -> None:
         # const_dec: [operator '=', literal_node, const_tail] or [row_size, ...] for array
         if not getattr(const_dec, "children", None) or len(const_dec.children) < 2:
-            self._assign(id_no, self._default_value(data_type))
+            self._declare_in_current_scope(id_no, self._default_value(data_type))
             return
         first = const_dec.children[0]
         if getattr(first, "type", None) == "operator" and getattr(first, "value", None) == "=":
             literal_node = const_dec.children[1]
             val = self._eval_literal_as_value(literal_node)
-            self._assign(id_no, self._coerce_to(data_type, val))
+            self._declare_in_current_scope(id_no, self._coerce_to(data_type, val))
             return
         if getattr(first, "type", None) == "row_size":
-            self._assign(id_no, [])
+            self._declare_in_current_scope(id_no, [])
             return
-        self._assign(id_no, self._default_value(data_type))
+        self._declare_in_current_scope(id_no, self._default_value(data_type))
 
     def _exec_const_tail(self, data_type: str, const_tail_node) -> None:
         # const_tail: [id_no, const_dec]
@@ -513,14 +565,14 @@ class Interpreter:
     def _declare_one(self, identifier_token_type: str, data_type: str, norm_dec_node) -> None:
         # norm_dec: row_size/array OR '=' expr OR empty (None when parser hit error)
         if norm_dec_node is None or getattr(norm_dec_node, "type", None) == "norm_dec_empty":
-            self._assign(identifier_token_type, self._default_value(data_type))
+            self._declare_in_current_scope(identifier_token_type, self._default_value(data_type))
             return
         if getattr(norm_dec_node, "type", None) == "norm_dec" and norm_dec_node.children:
             first = norm_dec_node.children[0]
             if getattr(first, "type", None) == "operator" and first.value == "=":
                 expr = norm_dec_node.children[1]
                 val = self._eval_expr(expr)
-                self._assign(identifier_token_type, self._coerce_to(data_type, val))
+                self._declare_in_current_scope(identifier_token_type, self._coerce_to(data_type, val))
                 return
             if getattr(first, "type", None) == "row_size":
                 # arrays: build runtime list; support initializer list if present
@@ -531,9 +583,9 @@ class Interpreter:
                     if getattr(maybe_array, "type", None) == "array" and getattr(maybe_array, "children", None):
                         init_array = maybe_array
                 value = self._build_array_value(data_type, first, init_array)
-                self._assign(identifier_token_type, value)
+                self._declare_in_current_scope(identifier_token_type, value)
                 return
-        self._assign(identifier_token_type, self._default_value(data_type))
+        self._declare_in_current_scope(identifier_token_type, self._default_value(data_type))
 
     def _exec_identifier_stat(self, node, resume_child_index: int = 0) -> Any:
         # either [unary_op, id, id_access] or [id, id_stat_body]
@@ -797,62 +849,24 @@ class Interpreter:
         if len(node.children) == 4 and getattr(node.children[0], "type", None) == "for_init":
             # for-loop form
             init, cond, update, body = node.children
-            if resume_child_index == 3:
-                # break while resuming inside for-body after inhale
-                self.pop_scope()  # body scope preserved during pause
-                self.pop_scope()  # for-loop outer scope
-                return None
-            if resume_child_index == 4:
-                # continue while resuming inside for-body after inhale
-                self.pop_scope()  # body scope preserved during pause
-                self._exec(update)
-                while self._eval_cond(cond):
-                    try:
-                        self.push_scope()
-                        try:
-                            self._paused_stack.append((node, 2))
-                            self._exec(body)
-                        finally:
-                            if not self.waiting_for_input:
-                                self.pop_scope()
-                                if (
-                                    self._paused_stack
-                                    and self._paused_stack[-1][0] is node
-                                    and self._paused_stack[-1][1] == 2
-                                ):
-                                    self._paused_stack.pop()
-                    except BreakSignal:
-                        self.pop_scope()
-                        return None
-                    except ContinueSignal:
-                        if self.waiting_for_input:
-                            return None
-                        self._exec(update)
-                        continue
-                    if self.waiting_for_input:
-                        return None
-                    self._exec(update)
-                self.pop_scope()  # for-loop outer scope
-                return None
             if resume_child_index == 2:
-                # resumed after inhale inside for-body; complete current iteration
+                loop_signal = self._pending_loop_signal
+                self._pending_loop_signal = None
                 self.pop_scope()  # body scope preserved during pause
+                if loop_signal == "break":
+                    self.pop_scope()  # for-loop outer scope
+                    return None
                 self._exec(update)
                 while self._eval_cond(cond):
                     try:
                         self.push_scope()
                         try:
-                            self._paused_stack.append((node, 2))
+                            self._push_pause_frame(node, 2)
                             self._exec(body)
                         finally:
                             if not self.waiting_for_input:
                                 self.pop_scope()
-                                if (
-                                    self._paused_stack
-                                    and self._paused_stack[-1][0] is node
-                                    and self._paused_stack[-1][1] == 2
-                                ):
-                                    self._paused_stack.pop()
+                                self._drop_top_pause_frame(node, 2)
                     except BreakSignal:
                         self.pop_scope()
                         return None
@@ -873,17 +887,12 @@ class Interpreter:
                     try:
                         self.push_scope()
                         try:
-                            self._paused_stack.append((node, 2))
+                            self._push_pause_frame(node, 2)
                             self._exec(body)
                         finally:
                             if not self.waiting_for_input:
                                 self.pop_scope()
-                                if (
-                                    self._paused_stack
-                                    and self._paused_stack[-1][0] is node
-                                    and self._paused_stack[-1][1] == 2
-                                ):
-                                    self._paused_stack.pop()
+                                self._drop_top_pause_frame(node, 2)
                     except BreakSignal:
                         break
                     except ContinueSignal:
@@ -901,60 +910,45 @@ class Interpreter:
 
         # while-loop form
         cond, body = node.children
-        if resume_child_index == 3:
-            # break while resuming inside cycle-body after inhale
-            self.pop_scope()  # body scope preserved during pause
-            return None
-        if resume_child_index == 4:
-            # continue while resuming inside cycle-body after inhale
-            self.pop_scope()  # body scope preserved during pause
-            while self._eval_cond(cond):
-                try:
-                    self.push_scope()
-                    try:
-                        self._paused_stack.append((node, 1))
-                        self._exec(body)
-                    finally:
-                        if not self.waiting_for_input:
-                            self.pop_scope()
-                            if (
-                                self._paused_stack
-                                and self._paused_stack[-1][0] is node
-                                and self._paused_stack[-1][1] == 1
-                            ):
-                                self._paused_stack.pop()
-                except BreakSignal:
-                    break
-                except ContinueSignal:
-                    continue
-                if self.waiting_for_input:
-                    return None
-            return None
         # resume_child_index=1: one more iteration (re-eval condition, run body); used when resuming after inhale
         if resume_child_index == 1:
+            loop_signal = self._pending_loop_signal
+            self._pending_loop_signal = None
+            if loop_signal == "break":
+                self.pop_scope()  # body scope preserved during pause
+                return None
+            if loop_signal == "continue":
+                self.pop_scope()  # body scope preserved during pause
             if not self._eval_cond(cond):
                 return None
             self.push_scope()
             try:
-                self._paused_stack.append((node, 1))
-                self._exec(body)
+                self._push_pause_frame(node, 1)
+                try:
+                    self._exec(body)
+                except BreakSignal:
+                    # Break raised while resuming current while-body should exit
+                    # this loop, not be re-routed through outer paused frames.
+                    return None
+                except ContinueSignal:
+                    # Continue while resuming one iteration ends this resumed
+                    # body run; caller will continue from correct loop context.
+                    return None
             finally:
                 if not self.waiting_for_input:
                     self.pop_scope()
-                    if self._paused_stack and self._paused_stack[-1][0] is node and self._paused_stack[-1][1] == 1:
-                        self._paused_stack.pop()
+                    self._drop_top_pause_frame(node, 1)
             return None
         while self._eval_cond(cond):
             try:
                 self.push_scope()
                 try:
-                    self._paused_stack.append((node, 1))
+                    self._push_pause_frame(node, 1)
                     self._exec(body)
                 finally:
                     if not self.waiting_for_input:
                         self.pop_scope()
-                        if self._paused_stack and self._paused_stack[-1][0] is node and self._paused_stack[-1][1] == 1:
-                            self._paused_stack.pop()
+                        self._drop_top_pause_frame(node, 1)
             except BreakSignal:
                 break
             except ContinueSignal:
@@ -980,7 +974,7 @@ class Interpreter:
         if getattr(node.children[0], "type", None) == "data_type":
             dt = node.children[0].value
             vid = node.children[1].value
-            self._assign(vid, self._coerce_to(dt, val))
+            self._declare_in_current_scope(vid, self._coerce_to(dt, val))
             return None
         vid = node.children[0].value
         self._assign(vid, val)
@@ -996,9 +990,15 @@ class Interpreter:
             return None
         for i in range(resume_child_index, len(node.children)):
             child = node.children[i]
+            paused_depth_before = len(self._paused_stack)
             self._exec(child)
             if self.waiting_for_input:
-                self._paused_stack.append((node, i + 1))
+                # Preserve both parent and child continuation; place parent below
+                # child frames to maintain correct resume order.
+                if len(self._paused_stack) == paused_depth_before:
+                    self._push_pause_frame(node, i + 1)
+                else:
+                    self._insert_pause_frame(paused_depth_before, node, i + 1)
                 return None
         return None
 
@@ -1071,7 +1071,11 @@ class Interpreter:
             self._exec(body)
             if self.waiting_for_input:
                 # Keep function scope alive until input-driven resume completes.
-                self._pending_call = {"func_name": func_name, "return_stat": return_stat}
+                self._pending_call = {
+                    "func_name": func_name,
+                    "return_stat": return_stat,
+                    "scope_depth": len(self.scopes),
+                }
                 return None
             # explicit return statement node exists; execute it to return value or nothing
             rt = getattr(return_stat, "type", None)
