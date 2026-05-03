@@ -34,6 +34,8 @@ class TACInstr:
             return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.result)})"
         if self.op == "DECL_NORM":
             return f"(DECL_NORM, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
+        if self.op == "DECL_CONST":
+            return f"(DECL_CONST, {_fmt(self.arg1)})"
         if self.op in {"DECL_STRUCT", "DECL_STRUCT_INIT", "DECL_STRUCT_ARRAY", "DECL_STRUCT_ARRAY_INIT"}:
             return f"({self.op}, {_fmt(self.arg1)}, {_fmt(self.arg2)}, {_fmt(self.result)})"
         if self.op == "ASSIGN_WITH_ACCESS":
@@ -602,6 +604,8 @@ class TACGenerator:
             self._gen_normal_decl(inner)
         elif getattr(inner, "type", None) == "structure":
             self._gen_structure_decl(inner)
+        elif getattr(inner, "type", None) == "constant":
+            self._gen_constant_decl(inner)
         else:
             raise NotImplementedError(f"Declaration type not supported in TAC: {getattr(inner,'type',None)}")
 
@@ -674,6 +678,14 @@ class TACGenerator:
 
         self._gen_emit_norm_declaration(first_id, data_type, first_norm_dec)
         self._gen_norm_tail(first_tail, data_type)
+
+    def _gen_constant_decl(self, node: ASTNode) -> None:
+        """
+        constant -> [data_type, id_no, const_dec] | [struct_const]
+        Delegate exact constant semantics (init rules, coercion, tails, struct consts)
+        to the existing Interpreter implementation via TACVM.
+        """
+        self._emit("DECL_CONST", arg1=node)
 
     def _gen_norm_tail(self, node: Optional[ASTNode], data_type: str) -> None:
         if node is None:
