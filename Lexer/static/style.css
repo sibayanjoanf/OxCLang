@@ -635,6 +635,89 @@ span {
     flex-shrink: 0; 
 }
 
+/* ── Fun Mode ── */
+
+/* Animated background for fun mode (dark) */
+body.fun-mode {
+    background-image: url('bg_dark.gif');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* Animated background for fun mode (light) */
+body.fun-mode.light-theme {
+    background-image: url('bg_light.gif');
+}
+
+/* Lower opacity on the main panels so the bg shows through */
+body.fun-mode .container2,
+body.fun-mode .output-section {
+    opacity: 0.90;
+    transition: opacity 0.3s ease;
+}
+
+body.fun-mode .editor-wrapper,
+body.fun-mode .output-section {
+    background: rgba(7, 11, 20, 0.90);
+}
+
+body.fun-mode.light-theme .editor-wrapper,
+body.fun-mode.light-theme .output-section {
+    background: rgba(238, 238, 238, 0.90);
+}
+
+/* Run code overlay — Among Us emergency meeting style */
+#runOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.0);
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+#runOverlay.visible {
+    display: flex;
+    animation: overlayFadeIn 0.08s ease forwards;
+}
+
+#runOverlay img {
+    width: 100vw;
+    height: 100vh;
+    object-fit: fill;
+    image-rendering: auto;
+    animation: overlayPop 0.12s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes overlayFadeIn {
+    from { background: rgba(0,0,0,0); }
+    to   { background: rgba(0,0,0,0.55); }
+}
+
+@keyframes overlayPop {
+    from { transform: scale(0.6); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
+
+/* Wand button glows when fun mode is active */
+body.fun-mode #styleSwitch {
+    opacity: 1;
+    color: #ff79c6;
+    border-color: #ff79c6;
+    box-shadow: 0 0 8px #ff79c688;
+}
+
+body.fun-mode .run-button {
+    background-color: #c0392b;
+}
+
+body.fun-mode .run-button:hover {
+    background-color: #a93226;
+}
+
 /* ── Scrollbar ── */
 
 ::-webkit-scrollbar {

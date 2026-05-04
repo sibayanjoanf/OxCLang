@@ -9,6 +9,11 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
+    <!-- Fun Mode: run overlay -->
+    <div id="runOverlay">
+        <img src="{{ url_for('static', filename='coderan.gif') }}" alt="Running!" id="runOverlayGif">
+    </div>
+
     <div class="header">
     <div class="header-left">
         <div class="logo">
@@ -380,9 +385,10 @@
 
         codeInput.addEventListener('input', syncHighlight);
         
-        // run button'ed
+        // run button'ed — actual handler set after fun mode init below
         runButton.addEventListener('click', () => {
-            runProgram();
+            if (typeof runProgramWithOverlay === 'function') runProgramWithOverlay();
+            else runProgram();
         });
 
         // document.addEventListener('keydown', (e) => {
@@ -572,10 +578,44 @@
             }
         });
 
+        // ── Fun Mode ──
+        let funMode = false;
+        const runOverlay = document.getElementById('runOverlay');
+
         styleSwitch.addEventListener('click', () => {
-            document.body.classList.toggle('cute-theme');
-            const isCute = document.body.classList.contains('cute-theme');
-            styleIcon.className = isCute ? 'fas fa-minimize' : 'fas fa-wand-magic-sparkles';
+            funMode = !funMode;
+            document.body.classList.toggle('fun-mode', funMode);
+            styleIcon.className = funMode ? 'fas fa-minimize' : 'fas fa-wand-magic-sparkles';
+        });
+
+        // Wrap runProgram to show overlay in fun mode
+        const _originalRunProgram = runProgram;
+        function runProgramWithOverlay() {
+            if (!funMode) {
+                _originalRunProgram();
+                return;
+            }
+
+            // Show overlay
+            runOverlay.classList.add('visible');
+
+            // Force gif restart by cloning the img
+            const gif = document.getElementById('runOverlayGif');
+            const src = gif.src;
+            gif.src = '';
+            gif.src = src;
+
+            // Hide after ~2.5 s then run
+            setTimeout(() => {
+                runOverlay.classList.remove('visible');
+                _originalRunProgram();
+            }, 1700);
+        }
+
+        // Dismiss overlay on click too (for impatient users)
+        runOverlay.style.pointerEvents = 'auto';
+        runOverlay.addEventListener('click', () => {
+            runOverlay.classList.remove('visible');
         });
 
         updateLineNumbers();
