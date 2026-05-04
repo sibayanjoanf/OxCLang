@@ -276,16 +276,55 @@ class TACVM:
                 continue
 
             if op == "INCDEC":
-                # arg1 is '++'/'--', result is identifier token type
+                # arg1 is '++'/'--', arg2 is optional id_access, result is identifier token type
                 inc_op = instr.arg1
+                id_access = instr.arg2
                 vid = instr.result
-                cur = self.runtime._lookup(vid)
-                if inc_op == "++":
-                    new_val = (cur if cur is not None else 0) + 1
-                elif inc_op == "--":
-                    new_val = (cur if cur is not None else 0) - 1
-                else:
+
+                # Fast path: plain identifier (no member/index access)
+                if not id_access or not getattr(id_access, "children", None):
+                    cur = self.runtime._lookup(vid)
+                    if inc_op == "++":
+                        new_val = (cur if cur is not None else 0) + 1
+                    elif inc_op == "--":
+                        new_val = (cur if cur is not None else 0) - 1
+                    else:
+                        raise TACExecutionError(f"Unsupported INCDEC op: {inc_op}")
+                    self._set_var(vid, new_val)
+                    continue
+
+                if inc_op not in ("++", "--"):
                     raise TACExecutionError(f"Unsupported INCDEC op: {inc_op}")
+
+                dim_node = id_access.children[0] if len(id_access.children) > 0 else None
+                member_node = id_access.children[1] if len(id_access.children) > 1 else None
+                member_id = None
+                if getattr(member_node, "type", None) == "id_member" and getattr(member_node, "children", None):
+                    member_id = member_node.children[1].value if len(member_node.children) > 1 else None
+
+                # Struct member increment/decrement: obj.m++, arr[i].m++
+                if member_id is not None:
+                    cur = self.runtime._read_struct_member_with_access(vid, dim_node, member_id)
+                    if inc_op == "++":
+                        new_val = (cur if cur is not None else 0) + 1
+                    else:
+                        new_val = (cur if cur is not None else 0) - 1
+                    self.runtime._assign_struct_member_with_access(vid, dim_node, member_id, "=", new_val)
+                    continue
+
+                # Indexed array increment/decrement: arr[i]++
+                if getattr(dim_node, "type", None) == "dimension":
+                    cur = self.runtime.read_indexed_value(vid, dim_node)
+                    if inc_op == "++":
+                        new_val = (cur if cur is not None else 0) + 1
+                    else:
+                        new_val = (cur if cur is not None else 0) - 1
+                    self.runtime.assign_indexed_value(vid, dim_node, new_val)
+                    continue
+
+                # Fallback for unexpected id_access forms.
+                cur = self.runtime._lookup(vid)
+                new_val = (cur if cur is not None else 0) + (1 if inc_op == "++" else -1)
                 self._set_var(vid, new_val)
                 continue
 

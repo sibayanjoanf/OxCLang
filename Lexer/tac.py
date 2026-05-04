@@ -775,7 +775,8 @@ class TACGenerator:
         if getattr(node.children[0], "type", None) == "unary_op":
             op = node.children[0].value
             vid = node.children[1].value
-            self._emit("INCDEC", arg1=op, result=vid)
+            id_access = node.children[2] if len(node.children) > 2 else None
+            self._emit("INCDEC", arg1=op, arg2=id_access, result=vid)
             return
 
         vid = node.children[0].value
@@ -798,7 +799,7 @@ class TACGenerator:
 
         # postfix inc/dec: id_stat_tail -> [unary_op]
         if getattr(first, "type", None) == "unary_op":
-            self._emit("INCDEC", arg1=first.value, result=vid)
+            self._emit("INCDEC", arg1=first.value, arg2=id_access, result=vid)
             return
 
         # assignment tail: id_stat_tail -> [assignment]

@@ -260,6 +260,8 @@ class Interpreter:
             value = False
         elif value == "yuh" or getattr(value, "value", None) == "yuh":
             value = True
+        dtype = self._lookup_declared_type(identifier_token_type)
+        value = self._coerce_to(dtype, value)
         key = self._scope_key(identifier_token_type)
         for scope in reversed(self.scopes):
             if key in scope:
@@ -1636,11 +1638,11 @@ class Interpreter:
         Write an array element for TAC STORE_INDEX. dimension_node is AST 'dimension'.
         """
         if dimension_node is None or getattr(dimension_node, "type", None) != "dimension":
-            self._assign(id_token_type, self._coerce_to(self._lookup_declared_type(id_token_type), value))
+            self._assign(id_token_type, value)
             return
         indices = self._eval_dimension_indices(dimension_node)
         if not indices:
-            self._assign(id_token_type, self._coerce_to(self._lookup_declared_type(id_token_type), value))
+            self._assign(id_token_type, value)
             return
         arr = self._lookup(id_token_type)
         if not isinstance(arr, list):
@@ -2208,6 +2210,13 @@ class Interpreter:
             if isinstance(value, bool):
                 return "yuh" if value else "naur"
             return str(value)
+        # Gust instance: declared type is the struct name token; value is a member dict.
+        # Shallow-copy so `B = A~` does not alias the same object (OxC struct assignment semantics).
+        sem = getattr(self, "semantic", None)
+        if sem is not None and isinstance(value, dict):
+            struct_def = sem.get_structure(data_type)
+            if struct_def is not None:
+                return dict(value)
         return value
 
     def _lookup_declared_type(self, identifier_token_type: str) -> str:

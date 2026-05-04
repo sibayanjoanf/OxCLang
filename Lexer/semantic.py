@@ -1046,6 +1046,14 @@ class SemanticAnalyzer:
                     data_type = child.value
                     if i + 1 < len(n.children) and n.children[i + 1].type == 'identifier':
                         member_name = n.children[i + 1].value
+                        if member_name in members:
+                            line, col = self.get_location(member_name)
+                            actual_member = self.get_actual_name(member_name)
+                            self.error(
+                                f"Duplicate member declaration: '{actual_member}' is already declared in this structure",
+                                line,
+                                col,
+                            )
                         members[member_name] = data_type
                         i += 2
                         continue
@@ -1290,6 +1298,7 @@ class SemanticAnalyzer:
         has_unary = False
         identifier = None
         is_function_call = False
+        unary_id_access = None
         
         for child in node.children:
             if child.type == 'unary_op':
@@ -1301,6 +1310,7 @@ class SemanticAnalyzer:
                     is_function_call = True
                 self._visit_id_stat_body(child, identifier)
             elif child.type == 'id_access':
+                unary_id_access = child
                 self.visit(child)
         
         if identifier:
@@ -1311,17 +1321,7 @@ class SemanticAnalyzer:
                     line, col = self.get_location(identifier)
                     self.error(f"Undeclared identifier '{actual_name}'", line, col)
                 elif has_unary:
-                    # Spec: unary ++/-- only for int and char
-                    if symbol['data_type'] not in self.UNARY_TYPES:
-                        line, col = self.get_location(identifier)
-                        self.error(
-                            f"Cannot apply increment/decrement to '{actual_name}' "
-                            f"of type '{symbol['data_type']}' (only 'int' and 'char' allowed)",
-                            line, col,
-                        )
-                    if symbol['is_constant']:
-                        line, col = self.get_location(identifier)
-                        self.error(f"Cannot modify constant '{actual_name}'", line, col)
+                    self._check_unary_target(identifier, unary_id_access)
     
     def _visit_id_stat_body(self, node, identifier):
         if not node.children:
@@ -1410,7 +1410,8 @@ class SemanticAnalyzer:
                 if sym and sym.get('is_array') and not has_indexing:
                     # Set marker so _check_assignment can emit the specific array error
                     self._current_assignment_target_is_whole_array = True
-                self._visit_id_stat_tail(child, identifier)
+                id_access_node = node.children[0] if node.children and getattr(node.children[0], 'type', None) == 'id_access' else None
+                self._visit_id_stat_tail(child, identifier, id_access=id_access_node)
             elif child.type == 'id_access':
                 # If we see dimension indexing, this is element assignment (unless index is empty)
                 if child.children and hasattr(child.children[0], 'type') and child.children[0].type == 'dimension':
@@ -1431,6 +1432,26 @@ class SemanticAnalyzer:
         # Reset marker
         self._current_assignment_target_is_whole_array = False
     
+    def _dimension_has_indexing(self, dimension_node):
+        """
+        True when id_access's dimension carries at least one index expression
+        (non-empty size / pdim_size). Grammar always includes a dimension node;
+        for plain `obj.member` it is often empty and must not be treated as [] indexing.
+        """
+        if dimension_node is None or getattr(dimension_node, 'type', None) != 'dimension':
+            return False
+        for dc in getattr(dimension_node, 'children', []):
+            if getattr(dc, 'type', None) != 'row_size':
+                continue
+            for rsc in getattr(dc, 'children', []):
+                if getattr(rsc, 'type', None) == 'size' and getattr(rsc, 'children', None):
+                    return True
+                if getattr(rsc, 'type', None) == 'col_size':
+                    for cc in getattr(rsc, 'children', []):
+                        if getattr(cc, 'type', None) == 'pdim_size' and getattr(cc, 'children', None):
+                            return True
+        return False
+    
     def _visit_id_access_for_assignment(self, node, identifier):
         """Handle id_access which might be struct member access or array index."""
         for child in node.children:
@@ -1441,6 +1462,9 @@ class SemanticAnalyzer:
                         # Struct member access: id.member
                         self._validate_struct_member_access(identifier, member_id.value)
                 if child.type == 'dimension':
+                    if not self._dimension_has_indexing(child):
+                        self.visit(child)
+                        continue
                     # Array indexing on LHS: ensure base is actually an array
                     sym = self.lookup(identifier) if identifier else None
                     if sym and not sym.get('is_array'):
@@ -1474,7 +1498,7 @@ class SemanticAnalyzer:
                                 f"'{self.get_actual_name(identifier)}' is not an array; cannot use '[]' indexing",
                                 line, col,
                             )
-                self.visit(child)
+                    self.visit(child)
     
     def _validate_struct_member_access(self, struct_id, member_id):
         """Validate that a struct member exists and return its type."""
@@ -1511,25 +1535,72 @@ class SemanticAnalyzer:
         
         return struct_def[member_found_key]
     
-    def _visit_id_stat_tail(self, node, identifier):
-        symbol = self.lookup(identifier) if identifier else None
+    def _visit_id_stat_tail(self, node, identifier, id_access=None):
         actual_name = self.get_actual_name(identifier) if identifier else None
         
         for child in node.children:
             if child.type == 'unary_op':
-                if symbol:
-                    if symbol['data_type'] not in self.UNARY_TYPES:
-                        line, col = self.get_location(identifier)
-                        self.error(
-                            f"Cannot apply increment/decrement to '{actual_name}' "
-                            f"of type '{symbol['data_type']}' (only 'int' and 'char' allowed)",
-                            line, col,
-                        )
-                    if symbol['is_constant']:
-                        line, col = self.get_location(identifier)
-                        self.error(f"Cannot modify constant '{actual_name}'", line, col)
+                self._check_unary_target(identifier, id_access)
             elif child.type == 'assignment':
                 self._check_assignment(child, identifier, actual_name)
+
+    def _resolve_unary_target(self, identifier, id_access=None):
+        """
+        Resolve the actual lvalue targeted by ++/--:
+        - id
+        - id[index]
+        - id.member
+        - id[index].member
+        Returns (target_type, is_constant, target_display_name).
+        """
+        symbol = self.lookup(identifier) if identifier else None
+        if not symbol:
+            return (None, False, self.get_actual_name(identifier) if identifier else "")
+
+        actual_name = self.get_actual_name(identifier)
+        target_type = symbol.get('data_type')
+        target_name = actual_name
+
+        if id_access and getattr(id_access, 'children', None):
+            dim_node = id_access.children[0] if len(id_access.children) > 0 else None
+            member_node = id_access.children[1] if len(id_access.children) > 1 else None
+            member_resolved_for_unary = False
+
+            # Validate/member-resolve first when member access exists.
+            if getattr(member_node, 'type', None) == 'id_member' and getattr(member_node, 'children', None):
+                member_id = member_node.children[1] if len(member_node.children) > 1 else None
+                if member_id is not None and hasattr(member_id, 'value'):
+                    member_type = self._validate_struct_member_access(identifier, member_id.value)
+                    if member_type:
+                        target_type = member_type
+                        member_resolved_for_unary = True
+                    target_name = f"{actual_name}.{self.get_actual_name(member_id.value)}"
+
+            # For indexed array elements, unary applies to element type (not whole gust rows).
+            if getattr(dim_node, 'type', None) == 'dimension':
+                self._visit_id_access_for_assignment(id_access, identifier)
+                if symbol.get('is_array') and not member_resolved_for_unary:
+                    target_type = symbol.get('data_type')
+
+        return (target_type, bool(symbol.get('is_constant')), target_name)
+
+    def _check_unary_target(self, identifier, id_access=None):
+        if not identifier:
+            return
+        target_type, is_constant, target_name = self._resolve_unary_target(identifier, id_access=id_access)
+        if target_type is None:
+            return
+        if target_type not in self.UNARY_TYPES:
+            line, col = self.get_location(identifier)
+            self.error(
+                f"Cannot apply increment/decrement to '{target_name}' "
+                f"of type '{target_type}' (only 'int' and 'char' allowed)",
+                line,
+                col,
+            )
+        if is_constant:
+            line, col = self.get_location(identifier)
+            self.error(f"Cannot modify constant '{self.get_actual_name(identifier)}'", line, col)
     
     def _check_assignment(self, assignment_node, identifier, actual_name=None):
         symbol = self.lookup(identifier) if identifier else None
