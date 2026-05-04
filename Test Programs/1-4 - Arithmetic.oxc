@@ -1,7 +1,6 @@
 atmosphere(){
 
-    int a~
-    int b~
+    int a, b, choice~
 
     exhale("Enter first number: ")~
     inhale(a)~
@@ -9,14 +8,19 @@ atmosphere(){
     exhale("Enter second number: ")~
     inhale(b)~
 
+    exhale("[1] Add [2] Subtract [3] Multiply [4] Divide\nEnter your choice: ")~
+    inhale(choice)~    
+
     int sum = a + b~
     int difference = a - b~
     int product = a * b~
     int quotient = a / b~
 
-    exhale("\nSum: @{sum}")~
-    exhale("\nDifference: @{difference}")~
-    exhale("\nProduct: @{product}")~
-    exhale("\nQuotient: @{quotient}")~
-
+    stream(choice){
+      case 1: exhale("\nSum: @{sum}")~ resist~
+      case 2: exhale("\nDifference: @{difference}")~ resist~
+      case 3: exhale("\nProduct: @{product}")~ resist~
+      case 4: exhale("\nQuotient: @{quotient}")~ resist~
+      diffuse: exhale("\nInvalid choice.")~ resist~
+    }
 }

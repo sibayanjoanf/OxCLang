@@ -1,0 +1,312 @@
+atmosphere(){
+  int nClient = 0~
+  string cStr~
+
+  exhale("Enter number of clients (Max 5): ")~
+  inhale(cStr)~
+  if (horizon(cStr) == 0){
+    nClient = 1~
+  } else {
+    nClient = toInt(cStr)~
+  }
+
+  if (nClient > 5){
+    exhale("Limit reached. Setting to 5 clients.\n")~
+    nClient = 5~
+  } elseif (nClient <= 0){
+    exhale("Invalid number of clients. Setting to 1.\n")~
+    nClient = 1~
+  }
+
+  echo(int c = 0~ c < nClient~ c++~){
+
+    string name~
+    string accNum~
+    string tDate~
+    int nTx = 0~
+    float bal = 0.0~
+    string sumLog = " "~ 
+
+    exhale("\n--- Client Setup ---\n")~
+
+    // NAME VALIDATION
+    bool vName = naur~
+    cycle(!(vName)){
+      exhale("Client Name: ")~
+      inhale(name)~
+      int nLen = horizon(name)~
+
+      if (nLen == 0){
+        exhale("Error: Name cannot be empty.\n")~
+      } else {
+        bool hasSym = naur~
+        echo(int i = 0~ i < nLen~ i++~){
+          char ch = name[i]~
+          bool isOk = naur~
+          if (ch >= 'A' && ch <= 'Z'){ isOk = yuh~ }
+          if (ch >= 'a' && ch <= 'z'){ isOk = yuh~ }
+          if (ch == ' '){ isOk = yuh~ }
+          if (isOk == naur){ hasSym = yuh~ }
+        }
+        if (hasSym == yuh){
+          exhale("Error: Invalid symbol detected in Name.\n")~
+        } else {
+          vName = yuh~
+        }
+      }
+    }
+
+    // ACCOUNT NUMBER VALIDATION
+    bool vAcc = naur~
+    cycle(!(vAcc)){
+      exhale("Account Number (Max 15): ")~
+      inhale(accNum)~
+      int accLen = horizon(accNum)~
+
+      if (accLen == 0){
+        exhale("Error: Account number cannot be empty.\n")~
+      } elseif (accLen > 15){
+        exhale("Error: Account number exceeds 15 characters.\n")~
+      } else {
+        bool hasSym = naur~
+        echo(int i = 0~ i < accLen~ i++~){
+          char ch = accNum[i]~
+          bool isOk = naur~
+          if (ch >= '0' && ch <= '9'){ isOk = yuh~ }
+          if (ch >= 'A' && ch <= 'Z'){ isOk = yuh~ }
+          if (ch >= 'a' && ch <= 'z'){ isOk = yuh~ }
+          if (isOk == naur){ hasSym = yuh~ }
+        }
+        if (hasSym == yuh){
+          exhale("Error: Invalid symbol detected.\n")~
+        } else {
+          vAcc = yuh~
+        }
+      }
+    }
+
+    // DATE VALIDATION
+    bool vDate = naur~
+    cycle(!(vDate)){
+      exhale("Date: ")~
+      inhale(tDate)~
+      int dLen = horizon(tDate)~
+
+      if (dLen == 0){
+        exhale("Error: Date cannot be empty.\n")~
+      } else {
+        bool hasSym = naur~
+        echo(int i = 0~ i < dLen~ i++~){
+          char ch = tDate[i]~
+          bool isOk = naur~
+          if (ch >= '0' && ch <= '9'){ isOk = yuh~ }
+          if (ch >= 'A' && ch <= 'Z'){ isOk = yuh~ }
+          if (ch >= 'a' && ch <= 'z'){ isOk = yuh~ }
+          if (ch == '/'){ isOk = yuh~ }
+          if (ch == '-'){ isOk = yuh~ }
+          if (isOk == naur){ hasSym = yuh~ }
+        }
+        if (hasSym == yuh){
+          exhale("Error: Invalid symbol detected in Date.\n")~
+        } else {
+          vDate = yuh~
+        }
+      }
+    }
+
+    // TRANSACTION NUMBER VALIDATION
+    bool vTx = naur~
+    string txStr~
+    cycle(!(vTx)){
+      exhale("Number of transactions: ")~
+      inhale(txStr)~
+      int txLen = horizon(txStr)~
+
+      if (txLen == 0){
+        exhale("Error: Number of transactions cannot be empty.\n")~
+      } else {
+        bool hasSym = naur~
+        echo(int i = 0~ i < txLen~ i++~){
+          char ch = txStr[i]~
+          bool isOk = naur~
+          if (ch >= '0' && ch <= '9'){ isOk = yuh~ }
+          if (isOk == naur){ hasSym = yuh~ }
+        }
+        if (hasSym == yuh){
+          exhale("Error: Must be a valid number.\n")~
+        } else {
+          nTx = toInt(txStr)~
+          if (nTx <= 0){
+            exhale("Error: Must be greater than 0.\n")~
+          } else {
+            vTx = yuh~
+          }
+        }
+      }
+    }
+
+    int tCnt = 0~
+    bool runTx = yuh~
+
+    cycle(runTx){
+      if (tCnt >= nTx){
+        exhale("\nMax transactions reached for @{name}.\n")~
+        runTx = naur~
+      } else {
+        int opt = 0~
+        string optStr~
+        bool vOpt = naur~
+
+        cycle(!(vOpt)){
+          exhale("\nOptions: 1.Deposit 2.Withdraw 3.Balance 4.Exit\n")~
+          exhale("Choose option: ")~
+          inhale(optStr)~
+          int oLen = horizon(optStr)~
+
+          if (oLen == 0){
+            exhale("Error: Option cannot be empty.\n")~
+          } else {
+            bool oSym = naur~
+            echo(int io = 0~ io < oLen~ io++~){
+              char cho = optStr[io]~
+              bool okO = naur~
+              if (cho >= '0' && cho <= '9'){ okO = yuh~ }
+              if (okO == naur){ oSym = yuh~ }
+            }
+
+            if (oSym == yuh){
+              exhale("Error: Enter a valid number (1-4).\n")~
+            } else {
+              opt = toInt(optStr)~
+              vOpt = yuh~
+            }
+          }
+        }
+
+        if (opt == 1){
+          float dep = 0.0~
+          string valStrDep~
+          bool cleanDep = naur~
+
+          cycle(!(cleanDep)){
+            exhale("Deposit amount: ")~
+            inhale(valStrDep)~
+            int vLenDep = horizon(valStrDep)~
+
+            if (vLenDep == 0){
+              exhale("Error: Amount cannot be empty.\n")~
+            } else {
+              bool symDep = naur~
+              int dotsDep = 0~
+              echo(int iDep = 0~ iDep < vLenDep~ iDep++~){
+                char chDep = valStrDep[iDep]~
+                bool okDep = naur~
+                if (chDep >= '0' && chDep <= '9'){ okDep = yuh~ }
+                if (chDep == '.'){
+                  okDep = yuh~
+                  dotsDep++~
+                }
+                if (okDep == naur){ symDep = yuh~ }
+              }
+
+              if (symDep == yuh){
+                exhale("Error: Enter a clean number.\n")~
+              } elseif (dotsDep > 1){
+                exhale("Error: Too many decimals.\n")~
+              } else {
+                cleanDep = yuh~
+              }
+            }
+          }
+
+          dep = toFloat(valStrDep)~
+
+          if (dep <= 0.0){
+            exhale("Error: Invalid deposit amount.\n")~
+          } elseif (dep > 50000.0){
+            exhale("Declined: Max deposit is 50,000 PHP.\n")~
+          } else {
+            bal = bal + dep~
+            string sDep = waft(dep, 2)~
+            sumLog = "@{sumLog}[Dep: +@{sDep}] "~
+            exhale("Deposit successful.\n")~
+            tCnt++~
+          }
+
+        } elseif (opt == 2){
+          float wdr = 0.0~
+          string valStrWdr~
+          bool cleanWdr = naur~
+
+          cycle(!(cleanWdr)){
+            exhale("Withdraw amount: ")~
+            inhale(valStrWdr)~
+            int vLenWdr = horizon(valStrWdr)~
+
+            if (vLenWdr == 0){
+              exhale("Error: Amount cannot be empty.\n")~
+            } else {
+              bool symWdr = naur~
+              int dotsWdr = 0~
+              echo(int iWdr = 0~ iWdr < vLenWdr~ iWdr++~){
+                char chWdr = valStrWdr[iWdr]~
+                bool okWdr = naur~
+                if (chWdr >= '0' && chWdr <= '9'){ okWdr = yuh~ }
+                if (chWdr == '.'){
+                  okWdr = yuh~
+                  dotsWdr++~
+                }
+                if (okWdr == naur){ symWdr = yuh~ }
+              }
+
+              if (symWdr == yuh){
+                exhale("Error: Enter a clean number.\n")~
+              } elseif (dotsWdr > 1){
+                exhale("Error: Too many decimals.\n")~
+              } else {
+                cleanWdr = yuh~
+              }
+            }
+          }
+
+          wdr = toFloat(valStrWdr)~
+
+          if (wdr <= 0.0){
+            exhale("Error: Invalid withdraw amount.\n")~
+          } elseif (wdr > 20000.0){
+            exhale("Declined: Max withdraw is 20,000 PHP.\n")~
+          } elseif (wdr > bal){
+            exhale("Declined: Insufficient balance.\n")~
+          } else {
+            bal = bal - wdr~
+            string sWdr = waft(wdr, 2)~
+            sumLog = "@{sumLog}[Wdr: -@{sWdr}] "~
+            exhale("Withdraw successful.\n")~
+            tCnt++~
+          }
+
+        } elseif (opt == 3){
+          string sBal = waft(bal, 2)~
+          sumLog = "@{sumLog}[Bal Check] "~
+          exhale("Current Balance: @{sBal} PHP\n")~
+
+        } elseif (opt == 4){
+          exhale("Exiting transactions for @{name}...\n")~
+          runTx = naur~
+
+        } else {
+          exhale("Invalid transaction option.\n")~
+        }
+      }
+    }
+
+    string fBal = waft(bal, 2)~
+
+    exhale("\nTRANSACTION SUMMARY:\n")~
+    exhale("Client Name: @{name}\n")~
+    exhale("Account No: @{accNum}\n")~
+    exhale("Date: @{tDate}\n")~
+    exhale("Final Balance: @{fBal} PHP\n")~
+    exhale("History: @{sumLog}\n")~
+  }
+}

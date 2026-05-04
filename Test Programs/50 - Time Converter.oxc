@@ -1,0 +1,116 @@
+air vacuum amPm(string time, int chcAmPm){
+  int len = horizon(time)~
+
+  int hour = toInt(time[0] & time[1])~
+  int minute = toInt(time[3] & time[4])~
+  
+  if(hour < 0 || hour > 12 || minute < 0 || minute > 59 || len != 5){
+    exhale("Invalid input!")~
+  } else {
+  
+    // AM
+    if(chcAmPm == 1){
+      if(hour == 12){
+        hour = 0~
+      } 
+    } 
+      
+    // PM
+    elseif(chcAmPm == 2){
+      if(hour != 12){
+        hour += 12~
+      }
+    }
+
+    exhale("[OUTPUT] Military Time - ")~
+    if(hour < 10){
+      exhale("0")~
+    }
+    exhale("@{hour}:")~
+    if(minute < 10){
+      exhale("0")~
+    }
+    exhale(minute)~
+  }
+}
+
+air vacuum military(string time){
+  int len = horizon(time)~
+
+  int hourz = toInt(time[0] & time[1])~
+  int hour = hourz~
+  int minute = toInt(time[3] & time[4])~
+
+  if(hour < 0 || hour > 23 || minute < 0 || minute > 59 || len != 5){
+    exhale("Invalid input!")~
+  } else {
+    if(hour >= 0 && hour <= 12){
+      if(hour == 0){
+        hour = 12~
+      }
+    } elseif(hour >= 13 && hour <= 23){
+      hour -= 12~
+    } 
+
+    exhale("[OUTPUT] Standard Time - ")~
+    if(hour < 10){
+      exhale("0")~
+    }
+    exhale("@{hour}:")~
+    if(minute < 10){
+      exhale("0")~
+    }
+    exhale("@{minute}")~
+    if(hourz >= 0 && hourz < 12){
+      exhale("am")~
+    } else { 
+      exhale("pm")~ 
+    }
+  }
+}
+
+atmosphere(){
+  int chcTimeType, chcAmPm~
+  string time~
+  bool flagAgain, flagAgain2~
+
+  do{
+    exhale("[1] Standard to Military\n[2] Military to Standard\n\nSelect: ")~
+    inhale(chcTimeType)~
+  
+    if(chcTimeType < 1 || chcTimeType > 2){
+      exhale("Invalid input!\n\n")~
+      flagAgain = yuh~
+    } elseif(chcTimeType == 1) {
+      do{
+        exhale("\n======== STANDARD TO MILITARY ========\n")~
+        exhale("[1] AM\n[2] PM\n[3] Exit\n\nSelect: ")~
+        inhale(chcAmPm)~
+        
+        if(chcAmPm < 1 || chcAmPm > 3){
+          exhale("Invalid input!\n")~
+          flagAgain2 = yuh~
+        } elseif(chcAmPm == 1 || chcAmPm == 2){
+          exhale("\n[FORMAT] HH:MM\n")~
+          exhale("[INPUT] Standard Time - ")~
+          inhale(time)~
+          amPm(time, chcAmPm)~
+          exhale("\n")~
+          flagAgain = yuh~
+        } elseif(chcAmPm == 3){
+          flagAgain = yuh~
+        }
+        exhale("======================================\n\n")~
+      } cycle(flagAgain2 == yuh)~
+    } elseif(chcTimeType == 2) {
+        exhale("\n======== MILITARY TO STANDARD ========\n")~
+        exhale("\n[FORMAT] HH:MM\n")~
+        exhale("[INPUT] Military Time - ")~
+        inhale(time)~
+        military(time)~
+        exhale("\n")~
+        exhale("======================================\n\n")~
+        flagAgain = yuh~
+    }
+  } cycle(flagAgain == yuh)~
+}  

@@ -1,0 +1,19 @@
+atmosphere(){
+  string word~
+  bool flagSession = yuh~
+  
+  do {
+    exhale("[INPUT] Enter: ")~
+    inhale(word)~
+  
+    int len = horizon(word) - 1~
+    char rev[horizon(word)]~
+
+    exhale("[OUTPUT] Reversed: ")~
+    echo(int i = 0~ i <= len~ i++~){
+      rev[i] = word[len - i]~
+      exhale(rev[i])~
+    }
+    exhale("\n\n")~
+  } cycle(flagSession == yuh)~
+}

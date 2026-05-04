@@ -1,0 +1,55 @@
+atmosphere(){
+  int answer=15, guess~
+  bool flagFound, flagAgain, flagPlay~  
+  char playAgain~
+  
+  do{
+    exhale("=================================================\n")~
+    exhale("\t>>>>>>>>  GUESSING GAME  <<<<<<<<\n")~
+    exhale("=================================================\n")~
+    exhale("You have 5 tries to guess the number correctly! \n\t\tYou've got this!\n")~
+    exhale("=================================================\n\n")~  
+    do{
+      int i~
+      echo(i = 1~ i <= 5~ i++~){
+        exhale("[@{i}] Guess: ")~
+        inhale(guess)~
+
+        if(guess != answer && guess < answer){
+          exhale("Too low! Try again!\n\n")~
+        } elseif(guess != answer && guess > answer){
+          exhale("Too high! Try again!\n\n")~
+        } elseif(guess == answer){
+          exhale("Congratulations! You got the number right!!!\n\n")~
+          flagFound = yuh~
+          resist~
+        }
+      }
+    } cycle(guess != answer && i <= 5)~
+  
+    if(flagFound == naur){
+      exhale("Sorry! You're out of attempts...\n\n")~
+    } 
+    exhale("=================================================\n\n")~
+
+    do{
+      exhale("Would you like to play again?\n[Y] Yes\n[N] No\n\nSelect: ")~
+      inhale(playAgain)~
+
+      if(playAgain == 'y' || playAgain == 'Y'){
+        exhale("\n")~
+        flagPlay = naur~
+        flagAgain = yuh~
+      } elseif(playAgain == 'n' || playAgain == 'N'){
+        flagPlay = naur~
+        flagAgain = naur~
+        exhale("\n=================================================\n")~
+        exhale("   >>>>>>>>  Thank you for playing!  <<<<<<<<\n")~
+        exhale("=================================================\n")~
+      } else {
+        exhale("Invalid input!\n\n")~
+        flagPlay = yuh~
+      }
+    } cycle(flagPlay == yuh)~
+  }cycle(flagAgain == yuh)~
+}

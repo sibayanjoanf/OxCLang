@@ -323,6 +323,11 @@ class TACVM:
                 self.runtime._declare_one(instr.result, instr.arg1, instr.arg2)
                 continue
 
+            if op == "DECL_CONST":
+                # arg1=constant AST node produced by parser (wind declarations)
+                self.runtime._exec_constant(instr.arg1)
+                continue
+
             if op == "DECL_STRUCT":
                 # arg1=struct_type token-id, result=var id
                 struct_type = instr.arg1
