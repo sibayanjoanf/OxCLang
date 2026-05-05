@@ -215,6 +215,16 @@ class TACVM:
             f"Operation requires numeric/char operands, got {type(value).__name__}"
         )
 
+    def _to_oxc_text(self, value: Any) -> str:
+        """Render runtime value using OxC output conventions."""
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "yuh" if value else "naur"
+        if isinstance(value, float):
+            return f"{value:.6f}"
+        return str(value)
+
     def _execute_until_pause_or_end(self) -> None:
         while self._pc < len(self._tac):
             if self.waiting_for_input:
@@ -272,7 +282,7 @@ class TACVM:
                     text = self.runtime._eval_output(out_node)
                 except Exception as e:
                     raise TACExecutionError(f"exhale output evaluation error: {str(e)}")
-                self.runtime.emit("" if text is None else str(text))
+                self.runtime.emit(self._to_oxc_text(text))
                 continue
 
             if op == "INCDEC":
@@ -493,14 +503,7 @@ class TACVM:
                     # String concatenation path (lowered from OxC '&' in TAC).
                     # Keep arithmetic '+' behavior for pure numeric operands.
                     if instr.value_type == "string" or isinstance(a, str) or isinstance(b, str):
-                        def _to_oxc_text(v: Any) -> str:
-                            if v is None:
-                                return ""
-                            if isinstance(v, bool):
-                                return "yuh" if v else "naur"
-                            return str(v)
-
-                        res = _to_oxc_text(a) + _to_oxc_text(b)
+                        res = self._to_oxc_text(a) + self._to_oxc_text(b)
                     else:
                         a = self._to_numeric_value(a)
                         b = self._to_numeric_value(b)

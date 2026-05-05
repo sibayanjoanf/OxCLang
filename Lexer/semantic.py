@@ -566,6 +566,19 @@ class SemanticAnalyzer:
                             )
                         self._validate_array_size(first_child, identifier)
                         declared_size = self._get_array_declared_size(first_child)
+                        if declared_size is None and self._row_size_first_dim_is_empty(first_child):
+                            has_initializer = (
+                                len(norm_dec.children) > 1
+                                and getattr(norm_dec.children[1], "type", None) == "array"
+                                and bool(getattr(norm_dec.children[1], "children", None))
+                            )
+                            if not has_initializer:
+                                line, col = self.get_location(identifier)
+                                actual_name = self.get_actual_name(identifier)
+                                self.error(
+                                    f"Array '{actual_name}' declared with [] must be initialized to infer its size",
+                                    line, col,
+                                )
                         # VLA rule: runtime-sized dimension (e.g. [x]) cannot be initialized at declaration.
                         # Size-inferred [ ] = { ... } has declared_size None but first dim is size_empty — allowed.
                         if len(norm_dec.children) > 1:
@@ -643,6 +656,19 @@ class SemanticAnalyzer:
                                 )
                             self._validate_array_size(first_child, identifier)
                             declared_size = self._get_array_declared_size(first_child)
+                            if declared_size is None and self._row_size_first_dim_is_empty(first_child):
+                                has_initializer = (
+                                    len(norm_dec.children) > 1
+                                    and getattr(norm_dec.children[1], "type", None) == "array"
+                                    and bool(getattr(norm_dec.children[1], "children", None))
+                                )
+                                if not has_initializer:
+                                    line, col = self.get_location(identifier)
+                                    actual_name = self.get_actual_name(identifier)
+                                    self.error(
+                                        f"Array '{actual_name}' declared with [] must be initialized to infer its size",
+                                        line, col,
+                                    )
                             if len(norm_dec.children) > 1:
                                 array_node = norm_dec.children[1]
                                 if array_node.type == 'array' and array_node.children:

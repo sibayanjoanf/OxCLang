@@ -224,6 +224,16 @@ class Interpreter:
     def emit_line(self, text: str = "") -> None:
         self.output.append(text + "\n")
 
+    def _to_oxc_text(self, value: Any) -> str:
+        """Render runtime values in OxC output form."""
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "yuh" if value else "naur"
+        if isinstance(value, float):
+            return f"{value:.6f}"
+        return str(value)
+
     # -------------------- Scope helpers --------------------
 
     def push_scope(self) -> None:
@@ -744,7 +754,7 @@ class Interpreter:
                 text = self._eval_output(out_node)
             except Exception:
                 text = ""
-            self.emit("" if text is None else str(text))
+            self.emit(self._to_oxc_text(text))
             return None
         return None
 
@@ -1383,11 +1393,11 @@ class Interpreter:
         # Single identifier or function_call wrapped in "output" (from parse_output_concat for id)
         if getattr(node, "type", None) == "identifier":
             v = self._eval_identifier(node)
-            parts.append("" if v is None else str(v))
+            parts.append(self._to_oxc_text(v))
             return
         if getattr(node, "type", None) == "function_call":
             v = self._eval_function_call(node)
-            parts.append("" if v is None else str(v))
+            parts.append(self._to_oxc_text(v))
             return
         if not getattr(node, "children", None):
             return
@@ -1396,15 +1406,15 @@ class Interpreter:
             concat_node = node.children[0]
             tail_node = node.children[1]
             if getattr(concat_node, "type", None) == "output_content":
-                parts.append(str(self._literal_to_value(concat_node.value)))
+                parts.append(self._to_oxc_text(self._literal_to_value(concat_node.value)))
             elif getattr(concat_node, "type", None) == "value":
-                parts.append(str(self._literal_to_value(concat_node.value)))
+                parts.append(self._to_oxc_text(self._literal_to_value(concat_node.value)))
             elif getattr(concat_node, "type", None) == "identifier":
                 v = self._eval_identifier(concat_node)
-                parts.append("" if v is None else str(v))
+                parts.append(self._to_oxc_text(v))
             elif getattr(concat_node, "type", None) == "function_call":
                 v = self._eval_function_call(concat_node)
-                parts.append("" if v is None else str(v))
+                parts.append(self._to_oxc_text(v))
             else:
                 self._collect_output_concat(concat_node, parts)
             if getattr(tail_node, "type", None) == "output_tail" and getattr(tail_node, "children", None) and len(tail_node.children) >= 2:
@@ -1414,24 +1424,24 @@ class Interpreter:
             concat_node = node.children[0]
             tail_node = node.children[1]
             if getattr(concat_node, "type", None) == "output_content":
-                parts.append(str(self._literal_to_value(concat_node.value)))
+                parts.append(self._to_oxc_text(self._literal_to_value(concat_node.value)))
             elif getattr(concat_node, "type", None) == "value":
-                parts.append(str(self._literal_to_value(concat_node.value)))
+                parts.append(self._to_oxc_text(self._literal_to_value(concat_node.value)))
             elif getattr(concat_node, "type", None) == "identifier":
                 v = self._eval_identifier(concat_node)
-                parts.append("" if v is None else str(v))
+                parts.append(self._to_oxc_text(v))
             elif getattr(concat_node, "type", None) == "function_call":
                 v = self._eval_function_call(concat_node)
-                parts.append("" if v is None else str(v))
+                parts.append(self._to_oxc_text(v))
             else:
                 self._collect_output_concat(concat_node, parts)
             self._collect_output_concat(tail_node, parts)
             return
         for ch in node.children:
             if getattr(ch, "type", None) == "output_content":
-                parts.append(str(self._literal_to_value(ch.value)))
+                parts.append(self._to_oxc_text(self._literal_to_value(ch.value)))
             elif getattr(ch, "type", None) == "value":
-                parts.append(str(self._literal_to_value(ch.value)))
+                parts.append(self._to_oxc_text(self._literal_to_value(ch.value)))
             else:
                 self._collect_output_concat(ch, parts)
 
@@ -1952,7 +1962,7 @@ class Interpreter:
                 if member_key not in target:
                     return match.group(0)
                 v = target[member_key]
-                return "" if v is None else str(v)
+                return self._to_oxc_text(v)
 
             # Support name, name[i], name[i][j] (no function calls in v3)
             m = re.fullmatch(r"([A-Za-z][A-Za-z0-9_]*)\s*(\[(.*?)\])?\s*(\[(.*?)\])?\s*", inner)
@@ -1971,7 +1981,7 @@ class Interpreter:
                     return match.group(0)
 
             if i1 is None and i2 is None:
-                return "" if val is None else str(val)
+                return self._to_oxc_text(val)
 
             # Must be array if indexed
             if not isinstance(val, list):
@@ -1983,7 +1993,7 @@ class Interpreter:
 
             if i2 is None:
                 v = val[idx1]
-                return "" if v is None else str(v)
+                return self._to_oxc_text(v)
 
             row = val[idx1]
             if not isinstance(row, list):
@@ -1992,7 +2002,7 @@ class Interpreter:
             if idx2 < 0 or idx2 >= len(row):
                 raise InterpreterError("Array out of bounds")
             v = row[idx2]
-            return "" if v is None else str(v)
+            return self._to_oxc_text(v)
 
         # Only interpolate when '@' is NOT escaped (i.e., not preceded by backslash).
         return re.sub(r"(?<!\\)@\{([^}]+)\}", repl, s)
@@ -2177,6 +2187,14 @@ class Interpreter:
                 return 1.0 if value else 0.0
             if value is None:
                 return 0.0
+            if isinstance(value, str):
+                # Spec: char -> float uses ASCII (single character), then cast to float.
+                if len(value) == 1:
+                    return float(ord(value))
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    raise InterpreterError(f"Cannot convert '{value}' to float")
             return float(value)
         if data_type == "bool":
             if isinstance(value, (int, float)):

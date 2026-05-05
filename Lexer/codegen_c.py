@@ -41,7 +41,7 @@ def _c_printf_for(dtype: str) -> str:
     if dtype == "bool":
         return "%lld"
     if dtype == "float":
-        return "%g"
+        return "%.6f"
     if dtype == "char":
         return "%c"
     if dtype == "string":
@@ -687,9 +687,20 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
 
     lines: List[str] = []
     lines.append("#include <stdio.h>")
+    lines.append("#include <stdlib.h>")
     lines.append("#include <stdbool.h>")
     lines.append("")
     _emit_struct_typedefs(semantic, lines)
+    lines.append("#define OXC_INT_MIN (-9999999999LL)")
+    lines.append("#define OXC_INT_MAX (9999999999LL)")
+    lines.append("static long long oxc_checked_int(long long v, const char* name) {")
+    lines.append("    if (v < OXC_INT_MIN || v > OXC_INT_MAX) {")
+    lines.append('        printf("Runtime error: int literal/assignment out of range for %s\\n", name);')
+    lines.append("        exit(1);")
+    lines.append("    }")
+    lines.append("    return v;")
+    lines.append("}")
+    lines.append("")
     lines.append("int main() {")
 
     decl_emitted: set[str] = set()
@@ -769,7 +780,10 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
             else:
                 dtype = "int"
             ctyp = _c_type_for(dtype)
-            lines.append(f"    {dst} = ({ctyp})({rhs});")
+            if dtype == "int":
+                lines.append(f'    {dst} = oxc_checked_int((long long)({rhs}), "{dst}");')
+            else:
+                lines.append(f"    {dst} = ({ctyp})({rhs});")
             continue
         if op == "ASSIGN_WITH_ACCESS":
             vid = instr.arg1
@@ -781,10 +795,16 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
             assi_op, expr_n = _extract_assi_op_and_expr(assign_node)
             lhs = _lvalue_from_id_access(vid, id_access, identifier_map)
             rhs_c = _expr_ast_to_c(expr_n, identifier_map)
+            vid_type = declared_types.get(vid, "int")
             if assi_op == "=":
-                lines.append(f"    {lhs} = {rhs_c};")
+                if vid_type == "int":
+                    lines.append(f'    {lhs} = oxc_checked_int((long long)({rhs_c}), "{lhs}");')
+                else:
+                    lines.append(f"    {lhs} = {rhs_c};")
             elif assi_op in ("+=", "-=", "*=", "/=", "%="):
                 lines.append(f"    {lhs} {assi_op} {rhs_c};")
+                if vid_type == "int":
+                    lines.append(f'    {lhs} = oxc_checked_int((long long)({lhs}), "{lhs}");')
             else:
                 lines.append(f"    /* ASSIGN_WITH_ACCESS: unsupported op {assi_op} */")
             continue
@@ -804,7 +824,11 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
             val = _operand_to_c_expr(instr.result)
             if isinstance(vid, str):
                 lhs = _lvalue_from_dimension(vid, dim, identifier_map)
-                lines.append(f"    {lhs} = ({val});")
+                vid_type = declared_types.get(vid, "int")
+                if vid_type == "int":
+                    lines.append(f'    {lhs} = oxc_checked_int((long long)({val}), "{lhs}");')
+                else:
+                    lines.append(f"    {lhs} = ({val});")
             else:
                 lines.append("    /* STORE_INDEX: bad operands */")
             continue
@@ -833,6 +857,8 @@ def generate_c_program(tac_code: Sequence[TACInstr], semantic: Any) -> str:
                 lines.append(f'    scanf("{fmt}", &{vid});')
             else:
                 lines.append(f'    scanf("{fmt}", &{vid});')
+            if dtype == "int":
+                lines.append(f'    {vid} = oxc_checked_int((long long){vid}, "{vid}");')
             continue
         if op == "EXHALE":
             out_node = instr.arg1

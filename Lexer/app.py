@@ -174,7 +174,7 @@ def run_code():
     except InterpreterError as e:
         runtime_errors.append(e.to_dict())
     except Exception as e:
-        runtime_errors.append({'message': f'Runtime error: {str(e)}', 'line': 0, 'column': 0})
+        runtime_errors.append({'message': str(e), 'line': 0, 'column': 0})
 
     _SESSIONS[session_id] = interp
 
@@ -225,7 +225,7 @@ def stdin():
     except InterpreterError as e:
         runtime_errors.append(e.to_dict())
     except Exception as e:
-        runtime_errors.append({'message': f'Runtime error: {str(e)}', 'line': 0, 'column': 0})
+        runtime_errors.append({'message': str(e), 'line': 0, 'column': 0})
 
     term = {
         'session_id': session_id,
