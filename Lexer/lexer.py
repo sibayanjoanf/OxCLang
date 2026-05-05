@@ -1,3 +1,5 @@
+from numpy import number
+
 from delimiters import (
     wspace_dlm,
     fun_dlm,
@@ -1296,25 +1298,44 @@ class Lexer:
         # letters and number mixed
         next_char = self.peek()
         if next_char and (next_char.isalpha() or next_char == '_'):
-            illegal_sequence = ""
-            while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
-                illegal_sequence += self.advance()
-            illegal_lexeme = number + illegal_sequence
-            self.error(f'invalid number literal: {illegal_lexeme}', start_line, start_col)
-            # self.error(f'invalid leading character (digit): {illegal_lexeme}', start_line, start_col)
-            return True
+            if next_char and (next_char.isalpha() or next_char == '_'):
+                self.error(f"Invalid delimiter after '{number}': {next_char}", start_line, start_col)
+                return True
+            # illegal_sequence = ""
+            # while self.peek() and (self.peek().isalnum() or self.peek() == '_'):
+            #     illegal_sequence += self.advance()
+            # illegal_lexeme = number + illegal_sequence
+            # self.error(f'invalid number literal: {illegal_lexeme}', start_line, start_col)
+            # # self.error(f'invalid leading character (digit): {illegal_lexeme}', start_line, start_col)
+            # return True
         
         parts = number.split('.')
         integer_part = parts[0].lstrip('+-')
         
         if has_dot:
             if len(integer_part) > self.MAX_FLOAT:
-                self.error(f'{number} exceeds maximum digits before decimal of {self.MAX_FLOAT}', start_line, start_col)
+                max_digits = self.MAX_FLOAT
+                sign_offset = 1 if number.startswith('-') else 0
+                total_valid_len = max_digits + sign_offset
+                overflow_len = len(integer_part) - max_digits
+                self.position -= overflow_len + 1 + len(parts[1])
+                self.column -= overflow_len + 1 + len(parts[1])
+                valid_number = number[:total_valid_len]
+                first_overflow = number[total_valid_len]
+                self.error(f"invalid delimiter after '{valid_number}': {first_overflow}", start_line, start_col)
                 return True
+            
             decimal_part = parts[1]
             if len(decimal_part) > self.MAX_FLOAT_POINT:
-                self.error(f'{number} exceeds maximum decimal places of {self.MAX_FLOAT_POINT}', start_line, start_col)
+                max_dec = self.MAX_FLOAT_POINT
+                overflow_len = len(decimal_part) - max_dec
+                self.position -= overflow_len
+                self.column -= overflow_len
+                valid_number = number[:-overflow_len]
+                first_overflow = decimal_part[max_dec]
+                self.error(f"invalid delimiter after '{valid_number}': {first_overflow}", start_line, start_col)
                 return True
+            
             if num_dlm(self.peek()):
                 self.tokens.append(Token('float_lit', number, start_line, start_col))
             else:
@@ -1327,7 +1348,17 @@ class Lexer:
                     return True
         else:
             if len(integer_part) > len(str(self.MAX_INT)):
-                self.error(f'{number} exceeds maximum of 10 digits', start_line, start_col)
+                max_digits = len(str(self.MAX_INT))
+                sign_offset = 1 if number.startswith('-') else 0
+                total_valid_len = max_digits + sign_offset
+                overflow_len = len(number) - total_valid_len
+                
+                self.position -= overflow_len
+                self.column -= overflow_len
+                
+                valid_number = number[:total_valid_len]
+                first_overflow_digit = number[total_valid_len]
+                self.error(f"Invalid delimiter after '{valid_number}': {first_overflow_digit}", start_line, start_col)
                 return True
             if num_dlm(self.peek()):
                 self.tokens.append(Token('int_lit', number, start_line, start_col))
