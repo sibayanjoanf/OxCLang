@@ -224,8 +224,20 @@ def stdin():
         interp.provide_input(user_input)
     except InterpreterError as e:
         runtime_errors.append(e.to_dict())
+        current_output = ''.join(interp.runtime.output)
+        if not current_output.endswith(str(user_input) + "\n"):
+            interp.runtime.emit(str(user_input) + "\n")
     except Exception as e:
         runtime_errors.append({'message': str(e), 'line': 0, 'column': 0})
+        current_output = ''.join(interp.runtime.output)
+        if not current_output.endswith(str(user_input) + "\n"):
+            interp.runtime.emit(str(user_input) + "\n")
+
+    if runtime_errors:
+        interp.waiting_for_input = False
+        interp.input_request = None
+
+    print(runtime_errors)  # now after the try/except
 
     term = {
         'session_id': session_id,

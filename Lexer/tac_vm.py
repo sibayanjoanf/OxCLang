@@ -562,6 +562,12 @@ class TACVM:
                     res = self.runtime._to_bool(a) and self.runtime._to_bool(b)
                 else:
                     raise TACExecutionError(f"Unhandled binary op: {op}")
+                
+                if op in ("+", "-", "*", "/") and not isinstance(res, bool):
+                    if isinstance(res, int) and (res > 9999999999 or res < -9999999999):
+                        raise TACExecutionError(f"Integer overflow: result {res} exceeds allowed range")
+                    elif isinstance(res, float) and (res > 9999999999.999999 or res < -9999999999.999999):
+                        raise TACExecutionError(f"Float overflow: result exceeds allowed range")
 
                 dst = instr.result
                 if self._is_temp(dst):

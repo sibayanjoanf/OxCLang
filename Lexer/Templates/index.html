@@ -275,13 +275,7 @@
             if (!out) return;
 
             var output = (terminal && terminal.output !== undefined && terminal.output !== null) ? String(terminal.output) : '';
-
-            if (terminal.runtime_errors && terminal.runtime_errors.length > 0) {
-                var errText = terminal.runtime_errors.map(function(e) {
-                    return 'Runtime error: ' + e.message + (e.line ? ' [Line ' + e.line + ', Col ' + e.column + ']' : '');
-                }).join('\n');
-                output += (output.endsWith('\n') || output === '' ? '' : '\n') + errText + '\n';
-            }
+            var hasErrors = terminal.runtime_errors && terminal.runtime_errors.length > 0;
 
             if (terminal.waiting_for_input) {
                 output = output.replace(/\n$/, '');
@@ -303,7 +297,16 @@
 
                 input.addEventListener('keydown', handleTerminalInput);
             } else {
-                out.textContent = output === '' ? '(no output)' : output;
+                out.textContent = output === '' && !hasErrors ? '(no output)' : output;
+
+                if (hasErrors) {
+                    var errSpan = document.createElement('span');
+                    errSpan.className = 'error-color';
+                    errSpan.textContent = '\nRuntime Impostor: ' + terminal.runtime_errors.map(function(e) {
+                        return e.message;
+                    }).join('\nRuntime Impostor: ') + '\n';
+                    out.appendChild(errSpan);
+                }
             }
 
             out.scrollTop = out.scrollHeight;
@@ -333,6 +336,10 @@
                     return;
                 }
                 if (data.terminal) {
+                    if (data.terminal.runtime_errors && data.terminal.runtime_errors.length > 0) {
+                        terminalSessionId = null;
+                    }
+                    console.log(data.terminal)
                     renderTerminal(data.terminal);
                 }
             })

@@ -2256,6 +2256,9 @@ class Interpreter:
         )
 
     def _convert_input(self, user_text: str, expected_type: str) -> Any:
+        INT_MAX = 9999999999
+        FLOAT_MAX = 9999999999.999999
+
         txt = user_text.rstrip("\r\n")
         if expected_type == "string":
             return txt
@@ -2267,14 +2270,21 @@ class Interpreter:
         if expected_type == "int":
             try:
                 # Allow numeric strings like "3" or "3.0" but reject non-numeric.
-                return int(float(txt))
+                val = int(float(txt))
             except Exception:
                 raise InterpreterError(f"Invalid int input: '{txt}'")
+            if val > INT_MAX or val < -INT_MAX:
+                raise InterpreterError(f"Integer input out of range: '{txt}' (max ±{INT_MAX})")
+            return val
         if expected_type == "float":
             try:
-                return float(txt)
+                val = float(txt)
             except Exception:
                 raise InterpreterError(f"Invalid float input: '{txt}'")
+            if val > FLOAT_MAX or val < -FLOAT_MAX:
+                raise InterpreterError(f"Float input out of range: '{txt}' (max ±{FLOAT_MAX})")
+            return val
+            
         if expected_type == "bool":
             if txt.lower() in ("yuh", "true", "1"):
                 return True
